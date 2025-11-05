@@ -11,6 +11,10 @@ export default class ShooterScene extends Phaser.Scene {
         this.angle = 0;
         this.horizonTilt = 0;
         
+        // Graphics objects
+        this.groundGraphics = null;
+        this.playerGraphics = null;
+        
         // Time limit
         this.timeLimit = 60000; // 60 seconds
         this.startTime = 0;
@@ -605,18 +609,49 @@ export default class ShooterScene extends Phaser.Scene {
         // Play exit sound
         soundManager.playMenuCancel();
         
-        // Clean up graphics
-        if (this.groundGraphics) {
-            this.groundGraphics.destroy();
-        }
-        if (this.playerGraphics) {
-            this.playerGraphics.destroy();
-        }
-        
         // Return to WorldScene
         this.scene.stop();
         this.scene.resume('WorldScene', {
             returnPosition: this.returnPosition
         });
+    }
+    
+    shutdown() {
+        console.log('[ShooterScene] Shutting down - cleaning up resources');
+        
+        // Clean up graphics
+        if (this.groundGraphics) {
+            this.groundGraphics.destroy();
+            this.groundGraphics = null;
+        }
+        if (this.playerGraphics) {
+            this.playerGraphics.destroy();
+            this.playerGraphics = null;
+        }
+        
+        // Clean up text objects
+        if (this.timeText) {
+            this.timeText.destroy();
+            this.timeText = null;
+        }
+        if (this.instructionText) {
+            this.instructionText.destroy();
+            this.instructionText = null;
+        }
+        if (this.charText) {
+            this.charText.destroy();
+            this.charText = null;
+        }
+        
+        // Clean up player and cursor references
+        this.player = null;
+        this.cursor = null;
+        this.wasdKeys = null;
+        this.escapeKey = null;
+        
+        // Clean up config
+        this.groundConfig = null;
+        
+        console.log('[ShooterScene] Shutdown complete');
     }
 }
