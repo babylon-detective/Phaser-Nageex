@@ -79,6 +79,9 @@ export default class StartScene extends Phaser.Scene {
             if (hasInteracted) {
                 await soundManager.init();
                 this.soundInitialized = true;
+                
+                // Start the ambient E minor song
+                await soundManager.playStartMenuSong();
             }
         }
         
@@ -127,6 +130,7 @@ export default class StartScene extends Phaser.Scene {
         if (index === 0) {
             // Start new game
             soundManager.playMenuConfirm(); // Sound effect
+            soundManager.stopStartMenuSong(); // Stop the menu song
             SaveState.clear(); // Clear any existing save state
             gameStateManager.resetGame(); // Reset game state
             gameStateManager.startTimer(); // Start gameplay timer
@@ -135,6 +139,7 @@ export default class StartScene extends Phaser.Scene {
         } else if (index === 1 && this.continueEnabled) {
             // Continue game
             soundManager.playMenuConfirm(); // Sound effect
+            soundManager.stopStartMenuSong(); // Stop the menu song
             console.log('[StartScene] ========== CONTINUE GAME ==========');
             
             // Check localStorage first
@@ -269,5 +274,14 @@ export default class StartScene extends Phaser.Scene {
         const justPressed = isDown && !this.lastStickDown;
         this.lastStickDown = isDown;
         return justPressed;
+    }
+    
+    shutdown() {
+        console.log('[StartScene] Shutting down - stopping menu song');
+        // Stop the menu song when scene ends
+        soundManager.stopStartMenuSong();
+        
+        // Remove resize listener
+        window.removeEventListener('resize', this.resizeGame.bind(this));
     }
 }

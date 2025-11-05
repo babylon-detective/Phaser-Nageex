@@ -19,6 +19,10 @@ class SoundManager {
         this.currentMusic = null;
         this.musicPlayer = null;
         
+        // Start menu song
+        this.startMenuSong = null;
+        this.songParts = [];
+        
         // Mute states
         this.sfxMuted = false;
         this.musicMuted = false;
@@ -282,6 +286,264 @@ class SoundManager {
             this.musicPlayer.start();
             console.log('[SoundManager] Music resumed');
         }
+    }
+    
+    // ===== Start Menu Song (E minor ambient composition) =====
+    
+    /**
+     * Initialize instruments for the start menu song
+     */
+    setupStartMenuSong() {
+        console.log('[SoundManager] Setting up start menu song (E minor, 107 BPM)');
+        
+        const bpm = 107.1;
+        
+        // Intro synth (energetic sawtooth)
+        const introSynth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'sawtooth' },
+            envelope: {
+                attack: 0.005,
+                decay: 0.1,
+                sustain: 0.3,
+                release: 0.4
+            }
+        });
+        
+        // Ambient pads (sustained sine waves)
+        const padSynth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'sine' },
+            envelope: {
+                attack: 2,
+                decay: 1,
+                sustain: 0.8,
+                release: 4
+            }
+        });
+        
+        // Bass
+        const bass = new Tone.MonoSynth({
+            oscillator: { type: 'square' },
+            envelope: {
+                attack: 0.01,
+                decay: 0.3,
+                sustain: 0.4,
+                release: 0.8
+            },
+            filterEnvelope: {
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.5,
+                baseFrequency: 200,
+                octaves: 2.5
+            }
+        });
+        
+        // Sub-bass
+        const subBass = new Tone.MonoSynth({
+            oscillator: { type: 'sine' },
+            envelope: {
+                attack: 0.02,
+                decay: 0.3,
+                sustain: 0.7,
+                release: 1.2
+            },
+            filter: {
+                type: 'lowpass',
+                frequency: 150,
+                rolloff: -24
+            }
+        });
+        
+        // Arpeggiator
+        const arpSynth = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: {
+                attack: 0.001,
+                decay: 0.2,
+                sustain: 0,
+                release: 0.2
+            }
+        });
+        
+        // Effects chain
+        const reverb = new Tone.Reverb({
+            decay: 4,
+            wet: 0.4
+        }).toDestination();
+        
+        const delay = new Tone.FeedbackDelay({
+            delayTime: '8n',
+            feedback: 0.3,
+            wet: 0.2
+        }).connect(reverb);
+        
+        const filter = new Tone.Filter({
+            frequency: 2000,
+            type: 'lowpass',
+            rolloff: -24
+        }).connect(delay);
+        
+        const volume = new Tone.Volume(-12).connect(filter); // Quieter for menu
+        
+        // Connect instruments
+        introSynth.connect(volume);
+        padSynth.connect(reverb);
+        bass.connect(volume);
+        subBass.connect(volume);
+        arpSynth.connect(delay);
+        
+        // Store references
+        this.startMenuSong = {
+            bpm,
+            introSynth,
+            padSynth,
+            bass,
+            subBass,
+            arpSynth,
+            reverb,
+            delay,
+            filter,
+            volume
+        };
+        
+        console.log('[SoundManager] Start menu song instruments ready');
+        
+        // Generate reverb
+        reverb.generate();
+    }
+    
+    /**
+     * Play the start menu song (loops continuously)
+     */
+    async playStartMenuSong() {
+        if (!this.initialized) {
+            console.warn('[SoundManager] Cannot play start menu song - not initialized');
+            return;
+        }
+        
+        if (!this.startMenuSong) {
+            this.setupStartMenuSong();
+        }
+        
+        if (this.songParts.length > 0) {
+            console.log('[SoundManager] Start menu song already playing');
+            return;
+        }
+        
+        console.log('[SoundManager] Starting E minor ambient song (107 BPM)');
+        
+        Tone.Transport.bpm.value = this.startMenuSong.bpm;
+        
+        const { introSynth, padSynth, bass, subBass, arpSynth } = this.startMenuSong;
+        
+        // E minor scale
+        const chords = {
+            Em: ['E3', 'G3', 'B3'],
+            Am: ['A3', 'C4', 'E4'],
+            Bm: ['B3', 'D4', 'F#4'],
+            C: ['C3', 'E3', 'G3'],
+            D: ['D3', 'F#3', 'A3'],
+            G: ['G3', 'B3', 'D4']
+        };
+        
+        // INTRO ARPEGGIO (fast, energetic)
+        const introArp = new Tone.Pattern((time, note) => {
+            arpSynth.triggerAttackRelease(note, '32n', time);
+        }, ['E4', 'G4', 'B4', 'E5', 'D5', 'B4', 'G4', 'E4'], 'up');
+        introArp.interval = '16n';
+        introArp.start(0).stop('16m');
+        this.songParts.push(introArp);
+        
+        // INTRO CHORDS
+        const introChords = new Tone.Part((time, chord) => {
+            introSynth.triggerAttackRelease(chord.notes, chord.duration, time);
+        }, [
+            { time: '0:0:0', notes: chords.Em, duration: '2n' },
+            { time: '2:0:0', notes: chords.C, duration: '2n' },
+            { time: '4:0:0', notes: chords.G, duration: '2n' },
+            { time: '6:0:0', notes: chords.D, duration: '2n' },
+            { time: '8:0:0', notes: chords.Em, duration: '2n' },
+            { time: '10:0:0', notes: chords.Am, duration: '2n' },
+            { time: '12:0:0', notes: chords.Bm, duration: '2n' },
+            { time: '14:0:0', notes: chords.Em, duration: '1n' }
+        ]);
+        introChords.loop = true;
+        introChords.loopEnd = '16m';
+        introChords.start(0);
+        this.songParts.push(introChords);
+        
+        // BASS PATTERN
+        const introBass = new Tone.Pattern((time, note) => {
+            bass.triggerAttackRelease(note, '4n', time);
+        }, ['E2', 'E2', 'C2', 'G2', 'D2', 'E2', 'A2', 'B2'], 'up');
+        introBass.interval = '2n';
+        introBass.start(0);
+        this.songParts.push(introBass);
+        
+        // SUB-BASS (deep rumble)
+        const subBassPattern = new Tone.Sequence((time, note) => {
+            subBass.triggerAttackRelease(note, '1n', time);
+        }, ['E1', 'C1', 'G1', 'D1', 'E1', 'A1', 'B1', 'E1'], '2m');
+        subBassPattern.start(0);
+        this.songParts.push(subBassPattern);
+        
+        // AMBIENT PAD CHORDS (long, sustained)
+        const padChords = new Tone.Part((time, chord) => {
+            padSynth.triggerAttackRelease(chord.notes, chord.duration, time);
+        }, [
+            { time: '16:0:0', notes: ['E3', 'G3', 'B3', 'E4'], duration: '4m' },
+            { time: '20:0:0', notes: ['C3', 'E3', 'G3', 'C4'], duration: '4m' },
+            { time: '24:0:0', notes: ['A2', 'C3', 'E3', 'A3'], duration: '4m' },
+            { time: '28:0:0', notes: ['B2', 'D3', 'F#3', 'B3'], duration: '4m' }
+        ]);
+        padChords.loop = true;
+        padChords.loopEnd = '32m';
+        padChords.start(0);
+        this.songParts.push(padChords);
+        
+        // AMBIENT MELODY (sparse, soft)
+        const ambientMelody = new Tone.Part((time, note) => {
+            arpSynth.triggerAttackRelease(note.pitch, note.duration, time, note.velocity);
+        }, [
+            { time: '20:0:0', pitch: 'E5', duration: '1m', velocity: 0.3 },
+            { time: '24:0:0', pitch: 'D5', duration: '2m', velocity: 0.3 },
+            { time: '28:0:0', pitch: 'B4', duration: '2m', velocity: 0.25 }
+        ]);
+        ambientMelody.loop = true;
+        ambientMelody.loopEnd = '32m';
+        ambientMelody.start(0);
+        this.songParts.push(ambientMelody);
+        
+        // Start transport
+        Tone.Transport.start();
+        
+        console.log('[SoundManager] Start menu song playing (looping)');
+    }
+    
+    /**
+     * Stop the start menu song
+     */
+    stopStartMenuSong() {
+        if (this.songParts.length === 0) {
+            return;
+        }
+        
+        console.log('[SoundManager] Stopping start menu song');
+        
+        // Stop and dispose all parts
+        this.songParts.forEach(part => {
+            if (part.state === 'started') {
+                part.stop();
+            }
+            part.dispose();
+        });
+        this.songParts = [];
+        
+        // Stop transport
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+        
+        console.log('[SoundManager] Start menu song stopped');
     }
     
     // ===== Volume Controls =====
