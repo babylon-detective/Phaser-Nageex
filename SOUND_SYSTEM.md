@@ -88,8 +88,8 @@ soundManager.toggleMusicMute();
 ## Current Integrations
 
 ### StartScene
-- Menu navigation sounds
-- Confirm/Cancel sounds
+- Menu navigation sounds (up/down)
+- Confirm/Cancel sounds (Start/Continue)
 - Auto-initialization on first user input
 
 ### BattleScene
@@ -102,6 +102,17 @@ soundManager.toggleMusicMute();
 ### BattleMenuScene
 - Menu navigation sounds (left/right)
 - Confirm sound on icon activation
+
+### WorldScene
+- Menu open sound (/ key, Select button)
+- Map open sound (M key, R2 button)
+- Debug ShooterScene access (F1 key)
+- Flying vehicle boarding sound
+
+### ShooterScene
+- Scene entry sound
+- Scene exit sound (ESC key)
+- Time complete success sound (victory fanfare)
 
 ## Adding New Sound Effects
 
