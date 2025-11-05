@@ -66,22 +66,39 @@ export default class StartScene extends Phaser.Scene {
         this.resizeGame();
 
         window.addEventListener('resize', this.resizeGame.bind(this));
+        
+        // Try to initialize sound immediately (will work if user already interacted with page)
+        this.tryInitializeSound();
+    }
+    
+    async tryInitializeSound() {
+        if (this.soundInitialized) return;
+        
+        try {
+            await soundManager.init();
+            this.soundInitialized = true;
+            
+            // Start the ambient E minor song
+            await soundManager.playStartMenuSong();
+            console.log('[StartScene] ✅ Music started immediately');
+        } catch (error) {
+            // Failed due to autoplay policy - will retry on user interaction
+            console.log('[StartScene] ⏸️ Waiting for user interaction to start music');
+        }
     }
 
     async update() {
-        // Initialize sound on first user interaction
+        // Initialize sound on first user interaction (if not already initialized)
         if (!this.soundInitialized) {
+            // Check for ANY user interaction (keyboard, mouse movement, click, gamepad)
             const hasInteracted = this.input.activePointer.isDown || 
+                                 this.input.activePointer.justMoved ||
                                  Object.values(this.wasdKeys).some(key => key.isDown) ||
                                  (this.gamepad && this.gamepad.buttons && 
                                   this.gamepad.buttons.some(btn => btn && btn.pressed));
             
             if (hasInteracted) {
-                await soundManager.init();
-                this.soundInitialized = true;
-                
-                // Start the ambient E minor song
-                await soundManager.playStartMenuSong();
+                await this.tryInitializeSound();
             }
         }
         
