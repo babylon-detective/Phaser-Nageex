@@ -7,6 +7,7 @@ import { dialogueManager } from "../managers/DialogueManager.js";
 import { dialogueDatabase } from "../data/DialogueDatabase.js";
 import { moneyManager } from "../managers/MoneyManager.js";
 import { itemsManager } from "../managers/ItemsManager.js";
+import { soundManager } from "../managers/SoundManager.js";
 
 export default class BattleScene extends Phaser.Scene {
     constructor() {
@@ -3073,6 +3074,9 @@ export default class BattleScene extends Phaser.Scene {
         
         console.log(`[BattleScene] Executing combo hit ${comboHit} for ${damage} damage (${comboMultiplier.toFixed(1)}x)`);
         
+        // Play attack sound
+        soundManager.playAttack();
+        
         // Determine attack direction
         const isPlayerRightOfEnemy = this.player.x > enemy.x;
         const attackOffset = isPlayerRightOfEnemy ? -this.attackOffset : this.attackOffset;
@@ -3513,6 +3517,9 @@ export default class BattleScene extends Phaser.Scene {
     applyDamageToEnemy(enemy, damage) {
         console.log(`[BattleScene] Applying ${damage} damage to ${enemy.enemyData.type}`);
         
+        // Play hit sound
+        soundManager.playHit();
+        
         enemy.enemyData.health = Math.max(0, enemy.enemyData.health - damage);
         
         // Alert NPC AI that it has been attacked (triggers combat mode)
@@ -3732,6 +3739,9 @@ export default class BattleScene extends Phaser.Scene {
         this.isDashing = true;
         this.isDashingAP = true; // Start consuming AP for dash
         this.canDash = false;
+        
+        // Play dash sound
+        soundManager.playDash();
         
         // Find closest enemy to determine default dash direction
         const closestEnemy = this.findClosestEnemy();
@@ -5250,6 +5260,9 @@ export default class BattleScene extends Phaser.Scene {
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
         
+        // Play level up sound
+        soundManager.playLevelUp();
+        
         // Create level up text
         const levelUpText = this.add.text(
             centerX,
@@ -5337,6 +5350,9 @@ export default class BattleScene extends Phaser.Scene {
 
     showVictorySequence() {
         console.log('[BattleScene] Starting victory sequence');
+        
+        // Play victory sound
+        soundManager.playVictory();
         
         // Disable input during victory sequence
         this.input.enabled = false;

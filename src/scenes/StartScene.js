@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import SaveState from "../SaveState";
 import { gameStateManager } from "../managers/GameStateManager.js";
+import { soundManager } from "../managers/SoundManager.js";
 
 export default class StartScene extends Phaser.Scene {
     constructor() {
@@ -13,6 +14,9 @@ export default class StartScene extends Phaser.Scene {
         this.gamepadButtonStates = {};
         this.lastStickUp = false;
         this.lastStickDown = false;
+        
+        // Sound initialization flag
+        this.soundInitialized = false;
     }
 
     preload() {
@@ -64,7 +68,20 @@ export default class StartScene extends Phaser.Scene {
         window.addEventListener('resize', this.resizeGame.bind(this));
     }
 
-    update() {
+    async update() {
+        // Initialize sound on first user interaction
+        if (!this.soundInitialized) {
+            const hasInteracted = this.input.activePointer.isDown || 
+                                 Object.values(this.wasdKeys).some(key => key.isDown) ||
+                                 (this.gamepad && this.gamepad.buttons && 
+                                  this.gamepad.buttons.some(btn => btn && btn.pressed));
+            
+            if (hasInteracted) {
+                await soundManager.init();
+                this.soundInitialized = true;
+            }
+        }
+        
         // Update gamepad
         this.updateGamepad();
         
@@ -75,11 +92,13 @@ export default class StartScene extends Phaser.Scene {
         if (navUp) {
             this.selectedIndex = (this.selectedIndex - 1 + this.menuItems.length) % this.menuItems.length;
             this.updateSelection();
+            soundManager.playMenuSelect(); // Sound effect
         }
         
         if (navDown) {
             this.selectedIndex = (this.selectedIndex + 1) % this.menuItems.length;
             this.updateSelection();
+            soundManager.playMenuSelect(); // Sound effect
         }
 
         // Handle selection with Enter key or Start button (button 9)
@@ -107,6 +126,7 @@ export default class StartScene extends Phaser.Scene {
     selectMenuItem(index) {
         if (index === 0) {
             // Start new game
+            soundManager.playMenuConfirm(); // Sound effect
             SaveState.clear(); // Clear any existing save state
             gameStateManager.resetGame(); // Reset game state
             gameStateManager.startTimer(); // Start gameplay timer
@@ -114,6 +134,7 @@ export default class StartScene extends Phaser.Scene {
             this.scene.start('WorldScene');
         } else if (index === 1 && this.continueEnabled) {
             // Continue game
+            soundManager.playMenuConfirm(); // Sound effect
             console.log('[StartScene] ========== CONTINUE GAME ==========');
             
             // Check localStorage first

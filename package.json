@@ -12,7 +12,8 @@
   "license": "ISC",
   "description": "JRPG",
   "dependencies": {
-    "phaser": "^3.70.0"
+    "phaser": "^3.70.0",
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "vite": "^5.4.16"

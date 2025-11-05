@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { dialogueManager } from "../managers/DialogueManager.js";
 import { skillsManager } from "../managers/SkillsManager.js";
+import { soundManager } from "../managers/SoundManager.js";
 
 export default class BattleMenuScene extends Phaser.Scene {
     constructor() {
@@ -83,15 +84,18 @@ export default class BattleMenuScene extends Phaser.Scene {
         if (navLeft) {
             this.selectedIconIndex = (this.selectedIconIndex - 1 + this.icons.length) % this.icons.length;
             this.updateIconSelection();
+            soundManager.playMenuSelect(); // Sound effect
         }
         
         if (navRight) {
             this.selectedIconIndex = (this.selectedIconIndex + 1) % this.icons.length;
             this.updateIconSelection();
+            soundManager.playMenuSelect(); // Sound effect
         }
         
         // Handle icon activation with U key or A button
         if (Phaser.Input.Keyboard.JustDown(this.actionKey) || this.isGamepadButtonJustPressed(0)) {
+            soundManager.playMenuConfirm(); // Sound effect
             this.activateCurrentIcon();
         }
     }
