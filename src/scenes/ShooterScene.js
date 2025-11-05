@@ -15,6 +15,10 @@ export default class ShooterScene extends Phaser.Scene {
         this.groundGraphics = null;
         this.playerGraphics = null;
         
+        // State flags
+        this.hasExited = false;
+        this.hasCompleted = false;
+        
         // Time limit
         this.timeLimit = 60000; // 60 seconds
         this.startTime = 0;
@@ -36,6 +40,10 @@ export default class ShooterScene extends Phaser.Scene {
         // Play entry sound
         soundManager.playMenuConfirm();
         
+        // Reset state flags
+        this.hasExited = false;
+        this.hasCompleted = false;
+        
         // Start timer
         this.startTime = this.time.now;
         
@@ -45,6 +53,11 @@ export default class ShooterScene extends Phaser.Scene {
         
         // Create Mac System 7 style pseudo-3D ground with track
         this.createWaterGround(height * 0.6);
+        
+        // Explicitly create player graphics (don't wait for update)
+        this.playerGraphics = this.add.graphics();
+        this.playerGraphics.setDepth(1000);
+        console.log('[ShooterScene] Player graphics created:', this.playerGraphics);
         
         // Create M7 style player (two rectangles)
         this.createM7Player(width, height);
@@ -429,7 +442,7 @@ export default class ShooterScene extends Phaser.Scene {
     }
     
     update(time, delta) {
-        if (!this.player) return;
+        if (!this.player || this.hasExited || this.hasCompleted) return;
         
         // Handle M7-style player input
         this.handlePlayerInput();
@@ -440,19 +453,16 @@ export default class ShooterScene extends Phaser.Scene {
         // Update ground (M7 style with tilting horizon)
         this.updateGround(time);
         
-        // Create new graphics for this frame
-        if (!this.playerGraphics) {
-            this.playerGraphics = this.add.graphics();
-            this.playerGraphics.setDepth(1000);
-        } else {
+        // Clear and redraw player graphics each frame
+        if (this.playerGraphics) {
             this.playerGraphics.clear();
+            
+            // Draw player (flying red square with aiming head)
+            this.drawPlayer(this.playerGraphics);
+            
+            // Draw parallax cursor
+            this.drawCursor(this.playerGraphics);
         }
-        
-        // Draw player (flying red square with aiming head)
-        this.drawPlayer(this.playerGraphics);
-        
-        // Draw parallax cursor
-        this.drawCursor(this.playerGraphics);
         
         // Update HUD
         this.updateHUD(time);
@@ -574,7 +584,10 @@ export default class ShooterScene extends Phaser.Scene {
     }
     
     handleSuccess() {
+        if (this.hasCompleted) return; // Prevent multiple calls
+        
         console.log('[ShooterScene] Time limit reached!');
+        this.hasCompleted = true;
         
         // Play success sound
         soundManager.playVictory();
@@ -604,7 +617,10 @@ export default class ShooterScene extends Phaser.Scene {
     }
     
     exitShooterScene() {
+        if (this.hasExited) return; // Prevent multiple exits
+        
         console.log('[ShooterScene] Exiting to WorldScene');
+        this.hasExited = true;
         
         // Play exit sound
         soundManager.playMenuCancel();
@@ -618,6 +634,10 @@ export default class ShooterScene extends Phaser.Scene {
     
     shutdown() {
         console.log('[ShooterScene] Shutting down - cleaning up resources');
+        
+        // Reset state flags
+        this.hasExited = false;
+        this.hasCompleted = false;
         
         // Clean up graphics
         if (this.groundGraphics) {
