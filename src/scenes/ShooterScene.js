@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { gameStateManager } from "../managers/GameStateManager.js";
+import { soundManager } from "../managers/SoundManager.js";
 
 export default class ShooterScene extends Phaser.Scene {
     constructor() {
@@ -27,6 +28,9 @@ export default class ShooterScene extends Phaser.Scene {
 
     create() {
         console.log('[ShooterScene] Creating M7 style rail shooter scene');
+        
+        // Play entry sound
+        soundManager.playMenuConfirm();
         
         // Start timer
         this.startTime = this.time.now;
@@ -568,6 +572,9 @@ export default class ShooterScene extends Phaser.Scene {
     handleSuccess() {
         console.log('[ShooterScene] Time limit reached!');
         
+        // Play success sound
+        soundManager.playVictory();
+        
         // Show completion message
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
@@ -594,6 +601,9 @@ export default class ShooterScene extends Phaser.Scene {
     
     exitShooterScene() {
         console.log('[ShooterScene] Exiting to WorldScene');
+        
+        // Play exit sound
+        soundManager.playMenuCancel();
         
         // Clean up graphics
         if (this.groundGraphics) {
