@@ -1649,6 +1649,12 @@ export default class WorldScene extends Phaser.Scene {
         
         console.log('[WorldScene] Storing player position for return:', playerPosition);
         
+        // CRITICAL: Stop WorldSceneSong before entering battle
+        if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
+            this.worldSceneSong.stop();
+            console.log('[WorldScene] WorldSceneSong stopped (entering battle)');
+        }
+        
         // Pause this scene instead of stopping it
         this.scene.pause();
         

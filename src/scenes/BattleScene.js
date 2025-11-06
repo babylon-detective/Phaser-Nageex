@@ -198,6 +198,13 @@ export default class BattleScene extends Phaser.Scene {
         soundManager.stopStartMenuSong();
         console.log('[BattleScene] Stopped StartMenuSong (if playing)');
         
+        // CRITICAL: Stop WorldSceneSong if still playing (defensive check)
+        const worldScene = this.scene.get('WorldScene');
+        if (worldScene && worldScene.worldSceneSong && worldScene.worldSceneSong.isPlaying) {
+            worldScene.worldSceneSong.stop();
+            console.log('[BattleScene] Stopped WorldSceneSong (if playing)');
+        }
+        
         // Validate data before proceeding
         if (!this.playerData || !this.npcDataArray || this.npcDataArray.length === 0) {
             console.error('[BattleScene] Missing required data for scene creation');
