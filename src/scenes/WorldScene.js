@@ -204,11 +204,17 @@ export default class WorldScene extends Phaser.Scene {
         this.partyManager.init();
         
         // Add recruitable NPCs to NPC Manager for battle triggering
+        // Only add NPCs that have valid gameObjects (not already-recruited)
         const recruitableNPCs = this.partyManager.getRecruitableNPCObjects();
         recruitableNPCs.forEach(npc => {
-            this.npcManager.npcs.push(npc);
+            if (npc && npc.npcData) {
+                // Safety check: only add NPCs with valid npcData
+                this.npcManager.npcs.push(npc);
+            } else {
+                console.warn('[WorldScene] Skipping invalid NPC object:', npc);
+            }
         });
-        console.log('[WorldScene] Added recruitable NPCs to NPC manager:', recruitableNPCs.length);
+        console.log('[WorldScene] Added recruitable NPCs to NPC manager:', recruitableNPCs.filter(npc => npc && npc.npcData).length);
         
         // CRITICAL: Create sprites for already-recruited party members (from loaded save)
         this.createRecruitedMemberSprites();

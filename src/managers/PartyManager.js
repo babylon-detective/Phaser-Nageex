@@ -100,7 +100,8 @@ export default class PartyManager {
             if (excludeIds.includes(data.id)) {
                 console.log(`[PartyManager] Skipping ${data.name} - already recruited`);
                 // Store the data but don't create sprite (they're in the party)
-                this.recruitableNPCs.set(data.id, { ...data, gameObject: null, recruited: true });
+                // Use isRecruited flag so getRecruitableNPCObjects() will skip them
+                this.recruitableNPCs.set(data.id, { ...data, gameObject: null, isRecruited: true });
             } else {
                 this.createRecruitableNPC(data);
             }
@@ -286,7 +287,8 @@ export default class PartyManager {
     getRecruitableNPCObjects() {
         const npcs = [];
         this.recruitableNPCs.forEach((npcData) => {
-            if (!npcData.isRecruited) {
+            // Only return NPCs that are not recruited AND have a valid gameObject
+            if (!npcData.isRecruited && npcData.gameObject) {
                 npcs.push(npcData.gameObject);
             }
         });
