@@ -80,6 +80,10 @@ export default class WorldScene extends Phaser.Scene {
         console.log('🎮 WorldScene create - VERSION 2.0 WITH PARTY SYSTEM');
         console.log('WorldScene create');
         
+        // CRITICAL: Stop StartMenuSong if still playing (defensive check)
+        soundManager.stopStartMenuSong();
+        console.log('[WorldScene] Stopped StartMenuSong (if playing)');
+        
         // Create the tilemap
         this.map = this.make.tilemap({ key: 'map' });
 

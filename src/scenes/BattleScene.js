@@ -194,6 +194,10 @@ export default class BattleScene extends Phaser.Scene {
     create() {
         console.log('[BattleScene] Creating scene');
         
+        // CRITICAL: Stop StartMenuSong if still playing (defensive check)
+        soundManager.stopStartMenuSong();
+        console.log('[BattleScene] Stopped StartMenuSong (if playing)');
+        
         // Validate data before proceeding
         if (!this.playerData || !this.npcDataArray || this.npcDataArray.length === 0) {
             console.error('[BattleScene] Missing required data for scene creation');
