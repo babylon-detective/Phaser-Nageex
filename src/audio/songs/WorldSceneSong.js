@@ -239,107 +239,165 @@ export class WorldSceneSong {
         const chords = this.getCMinorChords();
         const scale = this.getCMinorScale();
         
-        // ===== JUMPY KICK PATTERN - SYNCOPATED AND ENERGETIC =====
+        // ===== CLASSICAL BEAT PATTERN - 5/4, 3/4, 5/4, 3/4... =====
         
-        // Kick drum pattern - jumpy syncopated pattern
-        // Pattern: Kick on 1, 2-and, 3, 4-and (creates jumpy feel)
-        const kickPattern = new Tone.Sequence((time, note) => {
+        // Kick drum pattern - Classical alternating pattern
+        // Pattern: 1, 2, 3, 4, 5 ... 1, 2, 3 ... 1, 2, 3, 4, 5 ... etc
+        const kickPattern = new Tone.Part((time, note) => {
             if (note) {
-                this.kickDrum.triggerAttackRelease('C1', '8n', time, note.velocity || 0.8);
+                this.kickDrum.triggerAttackRelease('C1', '4n', time, note.velocity || 0.8);
             }
         }, [
-            { note: 'C1', velocity: 1.0 },    // Beat 1 - strong
-            { note: 'C1', velocity: 0.6 },    // Beat 2 - medium
-            null,                              // 2-and - skip
-            { note: 'C1', velocity: 0.7 },    // Beat 3 - medium-strong
-            null,                              // 3-and - skip
-            { note: 'C1', velocity: 0.5 },    // Beat 4 - lighter
-            null,                              // 4-and - skip
-            { note: 'C1', velocity: 0.6 }     // Off-beat accent
-        ], '8n'); // 8th note grid for syncopation
+            // Measure 1: 5 beats (5/4 time)
+            { time: '0:0:0', velocity: 1.0 },   // Beat 1 - strong
+            { time: '0:1:0', velocity: 0.7 },   // Beat 2
+            { time: '0:2:0', velocity: 0.8 },   // Beat 3
+            { time: '0:3:0', velocity: 0.6 },   // Beat 4
+            { time: '0:4:0', velocity: 0.7 },   // Beat 5
+            
+            // Measure 2: 3 beats (3/4 time)
+            { time: '1:0:0', velocity: 1.0 },   // Beat 1 - strong
+            { time: '1:1:0', velocity: 0.7 },   // Beat 2
+            { time: '1:2:0', velocity: 0.8 },   // Beat 3
+            
+            // Measure 3: 5 beats (5/4 time)
+            { time: '2:0:0', velocity: 1.0 },   // Beat 1 - strong
+            { time: '2:1:0', velocity: 0.7 },   // Beat 2
+            { time: '2:2:0', velocity: 0.8 },   // Beat 3
+            { time: '2:3:0', velocity: 0.6 },   // Beat 4
+            { time: '2:4:0', velocity: 0.7 },   // Beat 5
+            
+            // Measure 4: 3 beats (3/4 time)
+            { time: '3:0:0', velocity: 1.0 },   // Beat 1 - strong
+            { time: '3:1:0', velocity: 0.7 },   // Beat 2
+            { time: '3:2:0', velocity: 0.8 }    // Beat 3
+        ]);
+        kickPattern.loop = true;
+        kickPattern.loopEnd = '4m'; // 4 measures total (5+3+5+3 = 16 beats)
         kickPattern.start(0);
         this.parts.push(kickPattern);
         
-        // Snare pattern - on 2 and 4 with off-beat accents
-        const snarePattern = new Tone.Sequence((time, note) => {
+        // Snare pattern - accents on beat 2 of each measure
+        const snarePattern = new Tone.Part((time, note) => {
             if (note) {
-                this.snare.triggerAttackRelease('8n', time, note.velocity || 0.5);
+                this.snare.triggerAttackRelease('4n', time, note.velocity || 0.6);
             }
         }, [
-            null,                              // Beat 1
-            { note: 'snare', velocity: 0.8 }, // Beat 2 - strong
-            null,                              // 2-and
-            null,                              // Beat 3
-            { note: 'snare', velocity: 0.7 }, // Beat 4 - medium
-            null,                              // 4-and
-            null,                              // Beat 1 (next bar)
-            { note: 'snare', velocity: 0.4 }  // Off-beat ghost note
-        ], '8n');
+            // Measure 1: 5 beats
+            { time: '0:1:0', velocity: 0.7 },   // Beat 2
+            { time: '0:4:0', velocity: 0.5 },   // Beat 5 (light accent)
+            
+            // Measure 2: 3 beats
+            { time: '1:1:0', velocity: 0.8 },   // Beat 2 - strong
+            
+            // Measure 3: 5 beats
+            { time: '2:1:0', velocity: 0.7 },   // Beat 2
+            { time: '2:4:0', velocity: 0.5 },   // Beat 5 (light accent)
+            
+            // Measure 4: 3 beats
+            { time: '3:1:0', velocity: 0.8 }    // Beat 2 - strong
+        ]);
+        snarePattern.loop = true;
+        snarePattern.loopEnd = '4m';
         snarePattern.start(0);
         this.parts.push(snarePattern);
         
-        // Hi-hat pattern - continuous 8th notes with accents
-        const hiHatPattern = new Tone.Sequence((time, note) => {
+        // Hi-hat pattern - steady quarter notes with accents on beat 1
+        const hiHatPattern = new Tone.Part((time, note) => {
             if (note) {
-                this.hiHat.triggerAttackRelease('16n', time, note.velocity || 0.3);
+                this.hiHat.triggerAttackRelease('8n', time, note.velocity || 0.3);
             }
         }, [
-            { note: 'hat', velocity: 0.4 },    // Beat 1
-            { note: 'hat', velocity: 0.3 },    // 1-and
-            { note: 'hat', velocity: 0.5 },   // Beat 2 - accent
-            { note: 'hat', velocity: 0.3 },   // 2-and
-            { note: 'hat', velocity: 0.4 },   // Beat 3
-            { note: 'hat', velocity: 0.3 },   // 3-and
-            { note: 'hat', velocity: 0.5 },   // Beat 4 - accent
-            { note: 'hat', velocity: 0.3 }    // 4-and
-        ], '8n');
+            // Measure 1: 5 beats
+            { time: '0:0:0', velocity: 0.5 },   // Beat 1 - accent
+            { time: '0:1:0', velocity: 0.3 },   // Beat 2
+            { time: '0:2:0', velocity: 0.3 },   // Beat 3
+            { time: '0:3:0', velocity: 0.3 },   // Beat 4
+            { time: '0:4:0', velocity: 0.3 },   // Beat 5
+            
+            // Measure 2: 3 beats
+            { time: '1:0:0', velocity: 0.5 },   // Beat 1 - accent
+            { time: '1:1:0', velocity: 0.3 },   // Beat 2
+            { time: '1:2:0', velocity: 0.3 },   // Beat 3
+            
+            // Measure 3: 5 beats
+            { time: '2:0:0', velocity: 0.5 },   // Beat 1 - accent
+            { time: '2:1:0', velocity: 0.3 },   // Beat 2
+            { time: '2:2:0', velocity: 0.3 },   // Beat 3
+            { time: '2:3:0', velocity: 0.3 },   // Beat 4
+            { time: '2:4:0', velocity: 0.3 },   // Beat 5
+            
+            // Measure 4: 3 beats
+            { time: '3:0:0', velocity: 0.5 },   // Beat 1 - accent
+            { time: '3:1:0', velocity: 0.3 },   // Beat 2
+            { time: '3:2:0', velocity: 0.3 }    // Beat 3
+        ]);
+        hiHatPattern.loop = true;
+        hiHatPattern.loopEnd = '4m';
         hiHatPattern.start(0);
         this.parts.push(hiHatPattern);
         
-        // Sub-bass pattern - syncs with kick but with variation
-        const subBassPattern = new Tone.Sequence((time, note) => {
+        // Sub-bass pattern - follows classical pattern
+        const subBassPattern = new Tone.Part((time, note) => {
             if (note) {
-                this.subBass.triggerAttackRelease(note, '8n', time);
+                this.subBass.triggerAttackRelease(note.pitch, '4n', time);
             }
         }, [
-            'C1', null, 'C1', null, 'Eb1', null, 'C1', 'G1'
-        ], '8n');
+            // Measure 1: 5 beats
+            { time: '0:0:0', pitch: 'C1' },
+            { time: '0:2:0', pitch: 'C1' },
+            { time: '0:4:0', pitch: 'Eb1' },
+            
+            // Measure 2: 3 beats
+            { time: '1:0:0', pitch: 'C1' },
+            { time: '1:2:0', pitch: 'G1' },
+            
+            // Measure 3: 5 beats
+            { time: '2:0:0', pitch: 'C1' },
+            { time: '2:2:0', pitch: 'C1' },
+            { time: '2:4:0', pitch: 'Eb1' },
+            
+            // Measure 4: 3 beats
+            { time: '3:0:0', pitch: 'C1' },
+            { time: '3:2:0', pitch: 'G1' }
+        ]);
+        subBassPattern.loop = true;
+        subBassPattern.loopEnd = '4m';
         subBassPattern.start(0);
         this.parts.push(subBassPattern);
         
-        // ===== RHYTHMIC BASS LINE - BOUNCY AND PUNCHY =====
+        // ===== CLASSICAL BASS LINE - FOLLOWS 5/4, 3/4 PATTERN =====
         
-        // Bass line - shorter, more rhythmic notes
+        // Bass line - follows classical time signature pattern
         const bassLine = new Tone.Part((time, note) => {
             this.bass.triggerAttackRelease(note.pitch, note.duration, time, note.velocity || 0.7);
         }, [
-            // Bar 1
+            // Measure 1: 5 beats (5/4 time)
             { time: '0:0:0', pitch: 'C2', duration: '4n', velocity: 0.9 },
-            { time: '0:1:0', pitch: 'C2', duration: '8n', velocity: 0.6 },
-            { time: '0:1:2', pitch: 'Eb2', duration: '8n', velocity: 0.7 },
-            { time: '0:2:0', pitch: 'C2', duration: '4n', velocity: 0.8 },
-            { time: '0:3:0', pitch: 'G2', duration: '4n', velocity: 0.7 },
-            // Bar 2
-            { time: '1:0:0', pitch: 'F2', duration: '4n', velocity: 0.8 },
-            { time: '1:1:0', pitch: 'F2', duration: '8n', velocity: 0.6 },
-            { time: '1:1:2', pitch: 'Ab2', duration: '8n', velocity: 0.7 },
-            { time: '1:2:0', pitch: 'F2', duration: '4n', velocity: 0.8 },
-            { time: '1:3:0', pitch: 'C2', duration: '4n', velocity: 0.7 },
-            // Bar 3
+            { time: '0:1:0', pitch: 'C2', duration: '4n', velocity: 0.7 },
+            { time: '0:2:0', pitch: 'Eb2', duration: '4n', velocity: 0.8 },
+            { time: '0:3:0', pitch: 'C2', duration: '4n', velocity: 0.7 },
+            { time: '0:4:0', pitch: 'G2', duration: '4n', velocity: 0.7 },
+            
+            // Measure 2: 3 beats (3/4 time)
+            { time: '1:0:0', pitch: 'F2', duration: '4n', velocity: 0.9 },
+            { time: '1:1:0', pitch: 'Ab2', duration: '4n', velocity: 0.8 },
+            { time: '1:2:0', pitch: 'C2', duration: '4n', velocity: 0.7 },
+            
+            // Measure 3: 5 beats (5/4 time)
             { time: '2:0:0', pitch: 'G2', duration: '4n', velocity: 0.9 },
-            { time: '2:1:0', pitch: 'G2', duration: '8n', velocity: 0.6 },
-            { time: '2:1:2', pitch: 'Bb2', duration: '8n', velocity: 0.7 },
-            { time: '2:2:0', pitch: 'G2', duration: '4n', velocity: 0.8 },
-            { time: '2:3:0', pitch: 'D2', duration: '4n', velocity: 0.7 },
-            // Bar 4
-            { time: '3:0:0', pitch: 'Ab2', duration: '4n', velocity: 0.8 },
-            { time: '3:1:0', pitch: 'Ab2', duration: '8n', velocity: 0.6 },
-            { time: '3:1:2', pitch: 'C3', duration: '8n', velocity: 0.7 },
-            { time: '3:2:0', pitch: 'Ab2', duration: '4n', velocity: 0.8 },
-            { time: '3:3:0', pitch: 'Eb2', duration: '4n', velocity: 0.7 }
+            { time: '2:1:0', pitch: 'G2', duration: '4n', velocity: 0.7 },
+            { time: '2:2:0', pitch: 'Bb2', duration: '4n', velocity: 0.8 },
+            { time: '2:3:0', pitch: 'G2', duration: '4n', velocity: 0.7 },
+            { time: '2:4:0', pitch: 'D2', duration: '4n', velocity: 0.7 },
+            
+            // Measure 4: 3 beats (3/4 time)
+            { time: '3:0:0', pitch: 'Ab2', duration: '4n', velocity: 0.9 },
+            { time: '3:1:0', pitch: 'C3', duration: '4n', velocity: 0.8 },
+            { time: '3:2:0', pitch: 'Eb2', duration: '4n', velocity: 0.7 }
         ]);
         bassLine.loop = true;
-        bassLine.loopEnd = '4m';
+        bassLine.loopEnd = '4m'; // 4 measures (5+3+5+3 beats)
         bassLine.start(0);
         this.parts.push(bassLine);
         
@@ -383,7 +441,7 @@ export class WorldSceneSong {
         Tone.Transport.start();
         this.isPlaying = true;
         
-        console.log(`[WorldSceneSong] ▶️ Playing (${this.key}, ${this.bpm} BPM, jumpy beat, looping)`);
+        console.log(`[WorldSceneSong] ▶️ Playing (${this.key}, ${this.bpm} BPM, classical 5/4-3/4 pattern, looping)`);
     }
     
     /**
