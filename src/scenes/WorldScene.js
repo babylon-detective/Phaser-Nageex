@@ -779,10 +779,11 @@ export default class WorldScene extends Phaser.Scene {
             this.physics.add.existing(sprite);
             sprite.body.setCollideWorldBounds(true);
             
-            // Create direction indicator
-            const indicator = this.add.circle(
+            // Create direction indicator (square like original design)
+            const indicator = this.add.rectangle(
                 x,
                 y - 40,
+                10,
                 10,
                 member.indicatorColor
             );
