@@ -1624,6 +1624,12 @@ export default class BattleScene extends Phaser.Scene {
     handleRecruitmentVictory(npcData) {
         console.log('[BattleScene] Ending battle after recruitment');
         
+        // Stop battle music before transition (recruitment tune already played)
+        if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+            this.battleSceneSong.stop();
+            console.log('[BattleScene] BattleSceneSong stopped (recruitment transition)');
+        }
+        
         // Get updated HP states for all party members
         const hpStates = this.getUpdatedPartyHPStates();
         
@@ -5635,6 +5641,12 @@ export default class BattleScene extends Phaser.Scene {
                         alpha: 1,
                         duration: 1000,
                         onComplete: () => {
+                            // Stop battle music before transition (victory tune already played)
+                            if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+                                this.battleSceneSong.stop();
+                                console.log('[BattleScene] BattleSceneSong stopped (victory transition)');
+                            }
+                            
                             // Get updated HP states for all party members
                             const hpStates = this.getUpdatedPartyHPStates();
                             
