@@ -137,6 +137,14 @@ export default class MenuScene extends Phaser.Scene {
             console.log('[MenuScene] Selected member index:', this.selectedMemberIndex, '-', this.partyMembers[this.selectedMemberIndex].name);
             this.updateCharacterSelection();
         }
+        
+        // Handle save game with U key or A button (button 0) when on save point
+        if (this.isOnSavePoint) {
+            if (Phaser.Input.Keyboard.JustDown(this.actionKey) || this.isGamepadButtonJustPressed(0)) {
+                console.log('[MenuScene] Save triggered (U key or A button)');
+                this.handleSaveGame();
+            }
+        }
     }
 
     createOverlay() {
@@ -279,6 +287,45 @@ export default class MenuScene extends Phaser.Scene {
         `;
         this.menuContainer.appendChild(this.contentPanel);
 
+        // Create Save Game panel (only visible when on save point)
+        this.saveGamePanel = document.createElement('div');
+        this.saveGamePanel.id = 'save-game-panel';
+        this.saveGamePanel.style.cssText = `
+            position: absolute;
+            top: 50%;
+            right: 30px;
+            transform: translateY(-50%);
+            background: rgba(0, 255, 255, 0.15);
+            color: #00FFFF;
+            padding: 20px;
+            border: 3px solid #00FFFF;
+            border-radius: 15px;
+            min-width: 280px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+            display: ${this.isOnSavePoint ? 'block' : 'none'};
+        `;
+        this.saveGamePanel.innerHTML = `
+            <div style="font-size: 22px; font-weight: bold; margin-bottom: 15px; text-align: center; color: #00FFFF;">
+                💾 SAVE POINT
+            </div>
+            <div style="margin-bottom: 15px; color: #FFF; line-height: 1.5; font-size: 14px;">
+                You are standing on a <span style="color: #00FFFF; font-weight: bold;">Save Point</span>.<br>
+                Your progress will be saved.
+            </div>
+            <div style="padding: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #00FFFF; border-radius: 8px; margin-bottom: 15px;">
+                <div style="font-size: 12px; font-weight: bold; color: #00FFFF; margin-bottom: 6px;">Location:</div>
+                <div style="font-size: 11px; color: #AAA;">
+                    X: ${Math.floor(this.playerPosition?.x || 0)}<br>
+                    Y: ${Math.floor(this.playerPosition?.y || 0)}
+                </div>
+            </div>
+            <div style="text-align: center; color: #FFD700; font-size: 16px; font-weight: bold; margin-bottom: 8px;">
+                Press <span style="font-size: 20px; color: #00FFFF;">U</span> or <span style="font-size: 20px; color: #00FFFF;">A Button</span> to Save
+            </div>
+            <div id="save-status" style="text-align: center; margin-top: 10px; font-size: 12px; color: #00ffff; min-height: 18px; font-weight: bold;"></div>
+        `;
+        this.menuContainer.appendChild(this.saveGamePanel);
+
         // Create control hints at bottom
         this.controlsHint = document.createElement('div');
         this.controlsHint.style.cssText = `
@@ -295,7 +342,7 @@ export default class MenuScene extends Phaser.Scene {
         `;
         this.controlsHint.innerHTML = `
             <span style="color: #FFD700;">A/D</span> or <span style="color: #FFD700;">←/→</span> Switch Character • 
-            <span style="color: #FFD700;">/</span> or <span style="color: #FFD700;">ESC</span> Close
+            <span style="color: #FFD700;">/</span> or <span style="color: #FFD700;">ESC</span> Close${this.isOnSavePoint ? ' • <span style="color: #00FFFF;">U/A Button</span> Save' : ''}
         `;
         this.menuContainer.appendChild(this.controlsHint);
 
