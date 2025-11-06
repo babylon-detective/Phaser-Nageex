@@ -4,6 +4,8 @@ import { moneyManager } from "../managers/MoneyManager.js";
 import { itemsManager } from "../managers/ItemsManager.js";
 import { skillsManager } from "../managers/SkillsManager.js";
 import { partyLeadershipManager } from "../managers/PartyLeadershipManager.js";
+import { soundManager } from "../managers/SoundManager.js";
+import { MenuSceneSFX } from "../audio/sfx/MenuSceneSFX.js";
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -23,6 +25,9 @@ export default class MenuScene extends Phaser.Scene {
         
         // Pause state
         this.isPaused = false;
+        
+        // Sound effects
+        this.menuSceneSFX = null;
     }
 
     init(data) {
@@ -94,6 +99,27 @@ export default class MenuScene extends Phaser.Scene {
 
         // Start timer update interval
         this.startTimerUpdate();
+        
+        // Initialize sound effects
+        this.initializeSFX();
+    }
+    
+    /**
+     * Initialize menu scene sound effects
+     */
+    async initializeSFX() {
+        try {
+            // Initialize sound system first
+            await soundManager.init();
+            
+            // Create and initialize menu scene SFX
+            this.menuSceneSFX = new MenuSceneSFX();
+            await this.menuSceneSFX.init();
+            
+            console.log('[MenuScene] ✅ SFX initialized');
+        } catch (error) {
+            console.error('[MenuScene] Failed to initialize SFX:', error);
+        }
     }
     
     update() {
@@ -128,6 +154,9 @@ export default class MenuScene extends Phaser.Scene {
             console.log('[MenuScene] Navigating to previous character');
             this.selectedMemberIndex = (this.selectedMemberIndex - 1 + this.partyMembers.length) % this.partyMembers.length;
             console.log('[MenuScene] Selected member index:', this.selectedMemberIndex, '-', this.partyMembers[this.selectedMemberIndex].name);
+            if (this.menuSceneSFX) {
+                this.menuSceneSFX.playTabSwitch();
+            }
             this.updateCharacterSelection();
         }
         
@@ -135,6 +164,9 @@ export default class MenuScene extends Phaser.Scene {
             console.log('[MenuScene] Navigating to next character');
             this.selectedMemberIndex = (this.selectedMemberIndex + 1) % this.partyMembers.length;
             console.log('[MenuScene] Selected member index:', this.selectedMemberIndex, '-', this.partyMembers[this.selectedMemberIndex].name);
+            if (this.menuSceneSFX) {
+                this.menuSceneSFX.playTabSwitch();
+            }
             this.updateCharacterSelection();
         }
         
@@ -142,6 +174,9 @@ export default class MenuScene extends Phaser.Scene {
         if (this.isOnSavePoint) {
             if (Phaser.Input.Keyboard.JustDown(this.actionKey) || this.isGamepadButtonJustPressed(0)) {
                 console.log('[MenuScene] Save triggered (U key or A button)');
+                if (this.menuSceneSFX) {
+                    this.menuSceneSFX.playSaveGame();
+                }
                 this.handleSaveGame();
             }
         }
@@ -906,6 +941,11 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     closeMenu() {
+        // Play menu close sound
+        if (this.menuSceneSFX) {
+            this.menuSceneSFX.playMenuCancel();
+        }
+        
         // Stop timer interval
         if (this.timerInterval) {
             clearInterval(this.timerInterval);
@@ -1167,6 +1207,13 @@ export default class MenuScene extends Phaser.Scene {
         // Remove keyboard listeners
         this.input.keyboard.removeAllKeys(true);
         this.input.keyboard.removeAllListeners();
+        
+        // Clean up sound effects
+        if (this.menuSceneSFX) {
+            this.menuSceneSFX.dispose();
+            this.menuSceneSFX = null;
+            console.log('[MenuScene] SFX disposed (scene shutdown)');
+        }
 
         // Note: Game timer was never paused, so no need to resume it
 

@@ -11,6 +11,7 @@ import MapScene from "./MapScene";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
 import { WorldSceneSong } from "../audio/songs/WorldSceneSong.js";
+import { WorldSceneSFX } from "../audio/sfx/WorldSceneSFX.js";
 
 export default class WorldScene extends Phaser.Scene {
     constructor() {
@@ -28,6 +29,9 @@ export default class WorldScene extends Phaser.Scene {
         // Background music
         this.worldSceneSong = null;
         this.soundInitialized = false;
+        
+        // Sound effects
+        this.worldSceneSFX = null;
     }
 
     init(data) {
@@ -315,7 +319,11 @@ export default class WorldScene extends Phaser.Scene {
         // Set up M key to open the map
         this.input.keyboard.on('keydown-M', () => {
             console.log('[WorldScene] M key pressed, opening map');
-            soundManager.playMenuConfirm(); // Sound effect
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playMapOpen();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             this.scene.pause();
             this.scene.launch('MapScene', {
                 playerPosition: this.playerManager.getPlayerPosition()
@@ -327,7 +335,11 @@ export default class WorldScene extends Phaser.Scene {
         slashKey.on('down', () => {
             console.log('[WorldScene] / key pressed, opening menu');
             console.log('[WorldScene] Player on save point:', this.isOnSavePoint);
-            soundManager.playMenuConfirm(); // Sound effect
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playMenuOpen();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             this.scene.pause();
             this.scene.launch('MenuScene', {
                 playerPosition: this.playerManager.getPlayerPosition(),
@@ -339,7 +351,11 @@ export default class WorldScene extends Phaser.Scene {
         const f1Key = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F1);
         f1Key.on('down', () => {
             console.log('[WorldScene] 🐛 DEBUG: F1 pressed - launching ShooterScene');
-            soundManager.playMenuConfirm(); // Sound effect
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playInteraction();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             const currentLeader = partyLeadershipManager.getLeader();
             const returnPosition = currentLeader && currentLeader.sprite ? {
                 x: currentLeader.sprite.x,
@@ -414,7 +430,7 @@ export default class WorldScene extends Phaser.Scene {
 
         console.log('[WorldScene] Scene event listeners registered');
         
-        // Initialize background music
+        // Initialize background music and SFX
         this.tryInitializeMusic();
     }
     
@@ -433,8 +449,12 @@ export default class WorldScene extends Phaser.Scene {
             this.worldSceneSong = new WorldSceneSong();
             await this.worldSceneSong.play();
             
+            // Initialize and setup world scene SFX
+            this.worldSceneSFX = new WorldSceneSFX();
+            await this.worldSceneSFX.init();
+            
             this.soundInitialized = true;
-            console.log('[WorldScene] ✅ Music started immediately');
+            console.log('[WorldScene] ✅ Music and SFX started immediately');
         } catch (error) {
             console.log('[WorldScene] ⏸️ Waiting for user interaction to start music');
         }
@@ -1008,7 +1028,11 @@ export default class WorldScene extends Phaser.Scene {
         // Check for menu with Select button (button 8)
         if (this.isGamepadButtonJustPressed(8)) {
             console.log('[WorldScene] Select button pressed, opening menu');
-            soundManager.playMenuConfirm(); // Sound effect
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playMenuOpen();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             this.scene.pause();
             this.scene.launch('MenuScene', {
                 playerPosition: this.playerManager.getPlayerPosition(),
@@ -1020,7 +1044,11 @@ export default class WorldScene extends Phaser.Scene {
         // Check for map with R2 button (button 7)
         if (this.isGamepadButtonJustPressed(7)) {
             console.log('[WorldScene] R2 button pressed, opening map');
-            soundManager.playMenuConfirm(); // Sound effect
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playMapOpen();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             this.scene.pause();
             this.scene.launch('MapScene', {
                 playerPosition: this.playerManager.getPlayerPosition()
@@ -1466,6 +1494,7 @@ export default class WorldScene extends Phaser.Scene {
             this.worldSceneSong.stop();
             console.log('[WorldScene] Music stopped (scene paused)');
         }
+        // Note: SFX don't need to be stopped on pause, they're event-driven
     }
 
     sleep() {
@@ -1502,6 +1531,13 @@ export default class WorldScene extends Phaser.Scene {
             console.log('[WorldScene] Music disposed (scene shutdown)');
         }
         
+        // Clean up sound effects
+        if (this.worldSceneSFX) {
+            this.worldSceneSFX.dispose();
+            this.worldSceneSFX = null;
+            console.log('[WorldScene] SFX disposed (scene shutdown)');
+        }
+        
         // Call parent shutdown
         super.shutdown();
     }
@@ -1511,7 +1547,11 @@ export default class WorldScene extends Phaser.Scene {
         console.log('[WorldScene] Full party detected - entering rail shooter scene');
         
         // Play boarding sound
-        soundManager.playMenuConfirm();
+        if (this.worldSceneSFX) {
+            this.worldSceneSFX.playVehicleBoard();
+        } else {
+            soundManager.playMenuConfirm(); // Fallback
+        }
         
         // Store current position
         const currentLeader = partyLeadershipManager.getLeader();

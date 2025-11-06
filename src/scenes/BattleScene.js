@@ -8,6 +8,7 @@ import { dialogueDatabase } from "../data/DialogueDatabase.js";
 import { moneyManager } from "../managers/MoneyManager.js";
 import { itemsManager } from "../managers/ItemsManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { BattleSceneSFX } from "../audio/sfx/BattleSceneSFX.js";
 
 export default class BattleScene extends Phaser.Scene {
     constructor() {
@@ -56,6 +57,9 @@ export default class BattleScene extends Phaser.Scene {
         // Defeat System
         this.isPlayerDowned = false; // Track if player is downed
         this.playerDownedText = null; // Visual "DOWNED" indicator for player
+        
+        // Sound effects
+        this.battleSceneSFX = null;
         
         // Face Button Controls (U/I/O/P for each character)
         this.faceButtons = {
@@ -207,12 +211,34 @@ export default class BattleScene extends Phaser.Scene {
             alpha: 0,
             duration: 500,
             ease: 'Power2',
-            onComplete: () => {
+            onComplete: async () => {
                 blackScreen.destroy();
+                
+                // Initialize sound effects
+                await this.initializeSFX();
+                
                 // Start battle immediately (no dialogue at start)
                 this.setupBattle();
             }
         });
+    }
+    
+    /**
+     * Initialize battle scene sound effects
+     */
+    async initializeSFX() {
+        try {
+            // Initialize sound system first
+            await soundManager.init();
+            
+            // Create and initialize battle scene SFX
+            this.battleSceneSFX = new BattleSceneSFX();
+            await this.battleSceneSFX.init();
+            
+            console.log('[BattleScene] ✅ SFX initialized');
+        } catch (error) {
+            console.error('[BattleScene] Failed to initialize SFX:', error);
+        }
     }
 
     setupBattle() {
@@ -3075,7 +3101,11 @@ export default class BattleScene extends Phaser.Scene {
         console.log(`[BattleScene] Executing combo hit ${comboHit} for ${damage} damage (${comboMultiplier.toFixed(1)}x)`);
         
         // Play attack sound
-        soundManager.playAttack();
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.playAttack();
+        } else {
+            soundManager.playAttack(); // Fallback
+        }
         
         // Determine attack direction
         const isPlayerRightOfEnemy = this.player.x > enemy.x;
@@ -3518,7 +3548,11 @@ export default class BattleScene extends Phaser.Scene {
         console.log(`[BattleScene] Applying ${damage} damage to ${enemy.enemyData.type}`);
         
         // Play hit sound
-        soundManager.playHit();
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.playHit();
+        } else {
+            soundManager.playHit(); // Fallback
+        }
         
         enemy.enemyData.health = Math.max(0, enemy.enemyData.health - damage);
         
@@ -3741,7 +3775,11 @@ export default class BattleScene extends Phaser.Scene {
         this.canDash = false;
         
         // Play dash sound
-        soundManager.playDash();
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.playDash();
+        } else {
+            soundManager.playDash(); // Fallback
+        }
         
         // Find closest enemy to determine default dash direction
         const closestEnemy = this.findClosestEnemy();
@@ -4870,6 +4908,13 @@ export default class BattleScene extends Phaser.Scene {
         // Remove pause overlay if exists
         this.removePauseOverlay();
         
+        // Clean up sound effects
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.dispose();
+            this.battleSceneSFX = null;
+            console.log('[BattleScene] SFX disposed (scene shutdown)');
+        }
+        
         // Disable input
         this.input.keyboard.enabled = false;
         this.input.mouse.enabled = false;
@@ -5261,7 +5306,11 @@ export default class BattleScene extends Phaser.Scene {
         const centerY = this.cameras.main.height / 2;
         
         // Play level up sound
-        soundManager.playLevelUp();
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.playLevelUp();
+        } else {
+            soundManager.playLevelUp(); // Fallback
+        }
         
         // Create level up text
         const levelUpText = this.add.text(
@@ -5352,7 +5401,11 @@ export default class BattleScene extends Phaser.Scene {
         console.log('[BattleScene] Starting victory sequence');
         
         // Play victory sound
-        soundManager.playVictory();
+        if (this.battleSceneSFX) {
+            this.battleSceneSFX.playVictory();
+        } else {
+            soundManager.playVictory(); // Fallback
+        }
         
         // Disable input during victory sequence
         this.input.enabled = false;

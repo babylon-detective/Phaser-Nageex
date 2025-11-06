@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { ShooterSceneSFX } from "../audio/sfx/ShooterSceneSFX.js";
 
 export default class ShooterScene extends Phaser.Scene {
     constructor() {
@@ -35,6 +36,9 @@ export default class ShooterScene extends Phaser.Scene {
         this.gamepadButtonStates = {};
         this.lastL2State = false;
         this.lastStartState = false;
+        
+        // Sound effects
+        this.shooterSceneSFX = null;
     }
 
     init(data) {
@@ -42,11 +46,18 @@ export default class ShooterScene extends Phaser.Scene {
         this.returnPosition = data?.returnPosition || { x: 400, y: 300 };
     }
 
-    create() {
+    async create() {
         console.log('[ShooterScene] Creating M7 style rail shooter scene');
         
+        // Initialize sound effects
+        await this.initializeSFX();
+        
         // Play entry sound
-        soundManager.playMenuConfirm();
+        if (this.shooterSceneSFX) {
+            this.shooterSceneSFX.playSceneEnter();
+        } else {
+            soundManager.playMenuConfirm(); // Fallback
+        }
         
         // Reset state flags
         this.hasExited = false;
@@ -77,6 +88,24 @@ export default class ShooterScene extends Phaser.Scene {
         this.createHUD(width, height);
         
         console.log('[ShooterScene] M7 rail shooter initialized');
+    }
+    
+    /**
+     * Initialize shooter scene sound effects
+     */
+    async initializeSFX() {
+        try {
+            // Initialize sound system first
+            await soundManager.init();
+            
+            // Create and initialize shooter scene SFX
+            this.shooterSceneSFX = new ShooterSceneSFX();
+            await this.shooterSceneSFX.init();
+            
+            console.log('[ShooterScene] ✅ SFX initialized');
+        } catch (error) {
+            console.error('[ShooterScene] Failed to initialize SFX:', error);
+        }
     }
     
     createWaterGround(groundY) {
@@ -701,7 +730,11 @@ export default class ShooterScene extends Phaser.Scene {
         
         if (this.isPaused) {
             // Paused - show overlay
-            soundManager.playMenuConfirm();
+            if (this.shooterSceneSFX) {
+                this.shooterSceneSFX.playPause();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             this.pausedStartTime = this.time.now;
             
             // Create pause overlay
@@ -734,7 +767,11 @@ export default class ShooterScene extends Phaser.Scene {
             console.log('[ShooterScene] ⏸️ Paused');
         } else {
             // Unpaused - remove overlay and adjust timer
-            soundManager.playMenuConfirm();
+            if (this.shooterSceneSFX) {
+                this.shooterSceneSFX.playUnpause();
+            } else {
+                soundManager.playMenuConfirm(); // Fallback
+            }
             
             // Calculate how long we were paused
             const pauseDuration = this.time.now - this.pausedStartTime;
@@ -777,7 +814,11 @@ export default class ShooterScene extends Phaser.Scene {
         this.hasCompleted = true;
         
         // Play success sound
-        soundManager.playVictory();
+        if (this.shooterSceneSFX) {
+            this.shooterSceneSFX.playVictory();
+        } else {
+            soundManager.playVictory(); // Fallback
+        }
         
         // Show completion message
         const centerX = this.cameras.main.width / 2;
@@ -810,7 +851,11 @@ export default class ShooterScene extends Phaser.Scene {
         this.hasExited = true;
         
         // Play exit sound
-        soundManager.playMenuCancel();
+        if (this.shooterSceneSFX) {
+            this.shooterSceneSFX.playSceneExit();
+        } else {
+            soundManager.playMenuCancel(); // Fallback
+        }
         
         // Return to WorldScene
         this.scene.stop();
@@ -875,6 +920,13 @@ export default class ShooterScene extends Phaser.Scene {
         
         // Clean up config
         this.groundConfig = null;
+        
+        // Clean up sound effects
+        if (this.shooterSceneSFX) {
+            this.shooterSceneSFX.dispose();
+            this.shooterSceneSFX = null;
+            console.log('[ShooterScene] SFX disposed (scene shutdown)');
+        }
         
         console.log('[ShooterScene] Shutdown complete');
     }
