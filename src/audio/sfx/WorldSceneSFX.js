@@ -37,7 +37,7 @@ export class WorldSceneSFX {
     }
     
     /**
-     * Initialize all sound effects
+     * Initialize all sound effects (lazy loading - only create when needed)
      */
     async init() {
         if (this.initialized) {
@@ -45,66 +45,33 @@ export class WorldSceneSFX {
             return;
         }
         
-        console.log('[WorldSceneSFX] Setting up sound effects...');
+        console.log('[WorldSceneSFX] Setting up sound effects (lazy loading)...');
         
-        // Map open sound (pleasant chime)
-        this.mapOpen = new Tone.Synth({
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
-        }).toDestination();
-        this.mapOpen.volume.value = this.volume;
+        // Create shared master volume for all SFX (performance optimization)
+        this.masterVolume = new Tone.Volume(this.volume).toDestination();
         
-        // Menu open sound (confirm tone)
-        this.menuOpen = new Tone.Synth({
-            oscillator: { type: 'triangle' },
-            envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
-        }).toDestination();
-        this.menuOpen.volume.value = this.volume;
-        
-        // Vehicle boarding sound (ascending tone)
-        this.vehicleBoard = new Tone.Synth({
-            oscillator: { type: 'sawtooth' },
-            envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.4 }
-        }).toDestination();
-        this.vehicleBoard.volume.value = this.volume;
-        
-        // Footstep sound (subtle noise)
-        this.footstep = new Tone.NoiseSynth({
-            noise: { type: 'brown' },
-            envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 }
-        }).toDestination();
-        this.footstep.volume.value = this.volume - 5; // Quieter
-        
-        // Interaction sound (gentle click)
-        this.interaction = new Tone.Synth({
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
-        }).toDestination();
-        this.interaction.volume.value = this.volume;
-        
-        // NPC Encounter sound (couple of seconds - dramatic alert)
-        this.encounter = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'sawtooth' },
-            envelope: { attack: 0.1, decay: 0.3, sustain: 0.4, release: 1.5 }
-        }).toDestination();
-        this.encounter.volume.value = this.volume;
-        
-        // Walking sound (continuous while moving)
-        this.walking = new Tone.NoiseSynth({
-            noise: { type: 'brown' },
-            envelope: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.1 }
-        }).toDestination();
-        this.walking.volume.value = this.volume - 8; // Quieter for continuous sound
-        
-        // Sprint charge sound (continuous while holding Shift)
-        this.sprintCharge = new Tone.Synth({
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
-        }).toDestination();
-        this.sprintCharge.volume.value = this.volume - 5;
-        
+        // Don't create synths upfront - create them lazily when needed
         this.initialized = true;
-        console.log('[WorldSceneSFX] ✅ Sound effects ready');
+        console.log('[WorldSceneSFX] ✅ Sound effects ready (lazy loading enabled)');
+    }
+    
+    /**
+     * Lazy initialization helper - creates synth only when needed
+     */
+    _getOrCreateSynth(name, config) {
+        if (!this[name]) {
+            this[name] = new Tone.Synth(config).connect(this.masterVolume);
+            this[name].volume.value = 0; // Use master volume instead
+        }
+        return this[name];
+    }
+    
+    _getOrCreateNoiseSynth(name, config) {
+        if (!this[name]) {
+            this[name] = new Tone.NoiseSynth(config).connect(this.masterVolume);
+            this[name].volume.value = 0; // Use master volume instead
+        }
+        return this[name];
     }
     
     /**
@@ -112,7 +79,11 @@ export class WorldSceneSFX {
      */
     playMapOpen() {
         if (!this.initialized) return;
-        this.mapOpen.triggerAttackRelease('C5', '8n');
+        const synth = this._getOrCreateSynth('mapOpen', {
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
+        });
+        synth.triggerAttackRelease('C5', '8n');
     }
     
     /**
@@ -120,22 +91,26 @@ export class WorldSceneSFX {
      */
     playMenuOpen() {
         if (!this.initialized) return;
-        this.menuOpen.triggerAttackRelease('E4', '16n');
+        const synth = this._getOrCreateSynth('menuOpen', {
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
+        });
+        synth.triggerAttackRelease('E4', '16n');
     }
     
     /**
-     * Play vehicle boarding sound
+     * Play vehicle boarding sound (optimized - no Transport)
      */
     playVehicleBoard() {
         if (!this.initialized) return;
-        // Ascending tone
-        this.vehicleBoard.triggerAttackRelease('C4', '8n');
-        Tone.Transport.scheduleOnce(() => {
-            this.vehicleBoard.triggerAttackRelease('E4', '8n');
-        }, '+8n');
-        Tone.Transport.scheduleOnce(() => {
-            this.vehicleBoard.triggerAttackRelease('G4', '8n');
-        }, '+4n');
+        const synth = this._getOrCreateSynth('vehicleBoard', {
+            oscillator: { type: 'sine' }, // Changed from sawtooth for performance
+            envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.4 }
+        });
+        // Use setTimeout instead of Tone.Transport for better performance
+        synth.triggerAttackRelease('C4', '8n');
+        setTimeout(() => synth.triggerAttackRelease('E4', '8n'), 125); // ~8n at 120 BPM
+        setTimeout(() => synth.triggerAttackRelease('G4', '8n'), 250);
     }
     
     /**
@@ -143,7 +118,12 @@ export class WorldSceneSFX {
      */
     playFootstep() {
         if (!this.initialized) return;
-        this.footstep.triggerAttackRelease('8n');
+        const synth = this._getOrCreateNoiseSynth('footstep', {
+            noise: { type: 'brown' },
+            envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 }
+        });
+        synth.volume.value = -5; // Quieter
+        synth.triggerAttackRelease('8n');
     }
     
     /**
@@ -151,36 +131,50 @@ export class WorldSceneSFX {
      */
     playInteraction() {
         if (!this.initialized) return;
-        this.interaction.triggerAttackRelease('G4', '16n');
+        const synth = this._getOrCreateSynth('interaction', {
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+        });
+        synth.triggerAttackRelease('G4', '16n');
     }
     
     /**
-     * Play NPC encounter sound (couple of seconds)
+     * Play NPC encounter sound (optimized - no Transport, simpler synth)
      */
     playEncounter() {
         if (!this.initialized) return;
-        // Dramatic ascending chord sequence
-        this.encounter.triggerAttackRelease(['C3', 'Eb3', 'G3'], '8n');
-        Tone.Transport.scheduleOnce(() => {
-            this.encounter.triggerAttackRelease(['C4', 'Eb4', 'G4'], '8n');
-        }, '+8n');
-        Tone.Transport.scheduleOnce(() => {
-            this.encounter.triggerAttackRelease(['C5', 'Eb5', 'G5'], '4n');
-        }, '+4n');
+        // Use simple Synth instead of PolySynth for better performance
+        const synth = this._getOrCreateSynth('encounter', {
+            oscillator: { type: 'sine' }, // Changed from sawtooth for performance
+            envelope: { attack: 0.1, decay: 0.3, sustain: 0.4, release: 1.5 }
+        });
+        // Use setTimeout instead of Tone.Transport
+        synth.triggerAttackRelease('C3', '8n');
+        setTimeout(() => synth.triggerAttackRelease('Eb3', '8n'), 125);
+        setTimeout(() => synth.triggerAttackRelease('G3', '8n'), 250);
+        setTimeout(() => synth.triggerAttackRelease('C4', '8n'), 375);
+        setTimeout(() => synth.triggerAttackRelease('Eb4', '8n'), 500);
+        setTimeout(() => synth.triggerAttackRelease('G4', '8n'), 625);
+        setTimeout(() => synth.triggerAttackRelease('C5', '4n'), 750);
     }
     
     /**
-     * Start walking sound (continuous)
+     * Start walking sound (continuous - optimized with longer interval)
      */
     startWalking() {
         if (!this.initialized || this.isWalking) return;
         this.isWalking = true;
-        // Play walking sound every 0.3 seconds while walking
+        const synth = this._getOrCreateNoiseSynth('walking', {
+            noise: { type: 'brown' },
+            envelope: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.1 }
+        });
+        synth.volume.value = -8; // Quieter for continuous sound
+        // Reduced frequency for better performance (every 0.4s instead of 0.3s)
         this.walkingInterval = setInterval(() => {
-            if (this.isWalking && this.walking) {
-                this.walking.triggerAttackRelease('16n');
+            if (this.isWalking && synth) {
+                synth.triggerAttackRelease('16n');
             }
-        }, 300);
+        }, 400);
     }
     
     /**
@@ -201,16 +195,17 @@ export class WorldSceneSFX {
     startSprintCharge() {
         if (!this.initialized || this.isCharging) return;
         this.isCharging = true;
-        // Start continuous synth that increases in pitch as charge builds
-        if (this.sprintCharge) {
-            // Start at low frequency (C3 = ~130.81 Hz)
-            this.sprintCharge.triggerAttack('C3');
-            // Gradually increase frequency as charge builds (C3 to C5 = ~523.25 Hz)
-            // Use frequency.rampTo for smooth pitch increase
-            const startFreq = Tone.Frequency('C3').toFrequency();
-            const endFreq = Tone.Frequency('C5').toFrequency();
-            this.sprintCharge.frequency.rampTo(endFreq, 1); // Ramp over 1 second
-        }
+        const synth = this._getOrCreateSynth('sprintCharge', {
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+        });
+        synth.volume.value = -5;
+        // Start at low frequency (C3 = ~130.81 Hz)
+        synth.triggerAttack('C3');
+        // Gradually increase frequency as charge builds (C3 to C5 = ~523.25 Hz)
+        const startFreq = Tone.Frequency('C3').toFrequency();
+        const endFreq = Tone.Frequency('C5').toFrequency();
+        synth.frequency.rampTo(endFreq, 1); // Ramp over 1 second
     }
     
     /**
@@ -226,18 +221,13 @@ export class WorldSceneSFX {
     }
     
     /**
-     * Set volume for all SFX
+     * Set volume for all SFX (optimized - uses master volume)
      */
     setVolume(volume) {
         this.volume = volume;
-        if (this.mapOpen) this.mapOpen.volume.value = volume;
-        if (this.menuOpen) this.menuOpen.volume.value = volume;
-        if (this.vehicleBoard) this.vehicleBoard.volume.value = volume;
-        if (this.footstep) this.footstep.volume.value = volume - 5;
-        if (this.interaction) this.interaction.volume.value = volume;
-        if (this.encounter) this.encounter.volume.value = volume;
-        if (this.walking) this.walking.volume.value = volume - 8;
-        if (this.sprintCharge) this.sprintCharge.volume.value = volume - 5;
+        if (this.masterVolume) {
+            this.masterVolume.volume.value = volume;
+        }
     }
     
     /**
@@ -248,25 +238,23 @@ export class WorldSceneSFX {
         this.stopWalking();
         this.stopSprintCharge();
         
-        if (this.mapOpen) this.mapOpen.dispose();
-        if (this.menuOpen) this.menuOpen.dispose();
-        if (this.vehicleBoard) this.vehicleBoard.dispose();
-        if (this.footstep) this.footstep.dispose();
-        if (this.interaction) this.interaction.dispose();
-        if (this.encounter) this.encounter.dispose();
-        if (this.walking) this.walking.dispose();
-        if (this.sprintCharge) this.sprintCharge.dispose();
+        // Dispose all created synths (lazy loaded)
+        const synthNames = ['mapOpen', 'menuOpen', 'vehicleBoard', 'footstep', 
+                           'interaction', 'encounter', 'walking', 'sprintCharge'];
+        synthNames.forEach(name => {
+            if (this[name]) {
+                this[name].dispose();
+                this[name] = null;
+            }
+        });
         
-        this.mapOpen = null;
-        this.menuOpen = null;
-        this.vehicleBoard = null;
-        this.footstep = null;
-        this.interaction = null;
-        this.encounter = null;
-        this.walking = null;
-        this.sprintCharge = null;
+        // Dispose master volume
+        if (this.masterVolume) {
+            this.masterVolume.dispose();
+            this.masterVolume = null;
+        }
+        
         this.initialized = false;
-        
         console.log('[WorldSceneSFX] Disposed');
     }
 }
