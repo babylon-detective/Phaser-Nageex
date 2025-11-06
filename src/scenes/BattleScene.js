@@ -533,8 +533,8 @@ export default class BattleScene extends Phaser.Scene {
                 ...memberData,
                 indicator: indicator,
                 abilities: memberData.abilities || [],
-                currentHP: memberData.stats.health,
-                maxHP: memberData.stats.health
+                currentHP: memberData.stats.health, // Current HP (can be damaged from previous battles)
+                maxHP: memberData.stats.maxHealth || memberData.stats.health // Maximum HP
             };
             
             this.partyCharacters.push(character);

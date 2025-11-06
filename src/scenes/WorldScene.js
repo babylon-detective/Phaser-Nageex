@@ -591,31 +591,46 @@ export default class WorldScene extends Phaser.Scene {
         console.log('[WorldScene] ========== APPLYING PARTY HP STATES ==========');
         console.log('[WorldScene] HP States received:', hpStates);
         
-        // Apply player HP
+        // Apply player HP to GameStateManager
         if (hpStates.playerHP !== undefined) {
             gameStateManager.updatePlayerHealth(hpStates.playerHP);
-            console.log(`[WorldScene] Updated player HP: ${hpStates.playerHP}/${hpStates.playerMaxHP}`);
+            
+            // ALSO update PartyLeadershipManager for player
+            partyLeadershipManager.updateMemberStats('player', {
+                health: hpStates.playerHP,
+                maxHealth: hpStates.playerMaxHP
+            });
+            console.log(`[WorldScene] Updated player HP everywhere: ${hpStates.playerHP}/${hpStates.playerMaxHP}`);
         }
         
         // Apply party member HP states
-        if (hpStates.partyMembers && hpStates.partyMembers.length > 0 && this.partyManager) {
+        if (hpStates.partyMembers && hpStates.partyMembers.length > 0) {
             hpStates.partyMembers.forEach(memberHP => {
                 console.log(`[WorldScene] Updating ${memberHP.name} HP: ${memberHP.currentHP}/${memberHP.maxHP} (Downed: ${memberHP.isDowned})`);
                 
-                // Update HP in PartyManager
-                const npcData = this.partyManager.getRecruitableNPC(memberHP.id);
-                if (npcData) {
-                    npcData.stats.health = memberHP.currentHP;
-                    npcData.isDowned = memberHP.isDowned;
-                    
-                    // Update visual state if downed
-                    if (memberHP.isDowned && npcData.gameObject) {
-                        npcData.gameObject.setAlpha(0.5);
-                        console.log(`[WorldScene]   ${memberHP.name} is downed - reduced opacity`);
-                    } else if (npcData.gameObject) {
-                        npcData.gameObject.setAlpha(1.0);
+                // Update HP in PartyManager (for visual state in world)
+                if (this.partyManager) {
+                    const npcData = this.partyManager.getRecruitableNPC(memberHP.id);
+                    if (npcData) {
+                        npcData.stats.health = memberHP.currentHP;
+                        npcData.isDowned = memberHP.isDowned;
+                        
+                        // Update visual state if downed
+                        if (memberHP.isDowned && npcData.gameObject) {
+                            npcData.gameObject.setAlpha(0.5);
+                            console.log(`[WorldScene]   ${memberHP.name} is downed - reduced opacity`);
+                        } else if (npcData.gameObject) {
+                            npcData.gameObject.setAlpha(1.0);
+                        }
                     }
                 }
+                
+                // CRITICAL: Update PartyLeadershipManager (for MenuScene and other scenes)
+                partyLeadershipManager.updateMemberStats(memberHP.id, {
+                    health: memberHP.currentHP,
+                    maxHealth: memberHP.maxHP
+                });
+                console.log(`[WorldScene]   ✅ Updated ${memberHP.name} in PartyLeadershipManager`);
             });
         }
         

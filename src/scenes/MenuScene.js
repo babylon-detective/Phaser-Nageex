@@ -382,6 +382,10 @@ export default class MenuScene extends Phaser.Scene {
         const colorHex = '#' + member.indicatorColor.toString(16).padStart(6, '0');
         const money = moneyManager.getMoney();
         
+        // CRITICAL: Always fetch LATEST stats from PartyLeadershipManager to reflect battle damage
+        const freshParty = partyLeadershipManager.getParty();
+        const freshMember = freshParty[index];
+        
         // Get stats from different sources depending on whether it's the original player or a recruited member
         let stats, currentHP, maxHP;
         if (member.isOriginalPlayer) {
@@ -389,7 +393,8 @@ export default class MenuScene extends Phaser.Scene {
             currentHP = stats.health;
             maxHP = stats.maxHealth;
         } else {
-            stats = member.stats;
+            // Use FRESH stats from PartyLeadershipManager (updated after battle)
+            stats = freshMember ? freshMember.stats : member.stats;
             currentHP = stats.health;
             maxHP = stats.maxHealth || stats.health;
         }

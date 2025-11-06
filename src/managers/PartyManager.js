@@ -33,6 +33,7 @@ export default class PartyManager {
                 abilities: ['powerStrike', 'defend'],
                 stats: {
                     health: 120,
+                    maxHealth: 120, // Maximum HP
                     attack: 15,
                     defense: 10,
                     level: 1
@@ -53,6 +54,7 @@ export default class PartyManager {
                 abilities: ['fireball', 'heal'],
                 stats: {
                     health: 80,
+                    maxHealth: 80, // Maximum HP
                     attack: 20,
                     defense: 5,
                     level: 1
@@ -73,6 +75,7 @@ export default class PartyManager {
                 abilities: ['quickShot', 'dodge'],
                 stats: {
                     health: 100,
+                    maxHealth: 100, // Maximum HP
                     attack: 12,
                     defense: 8,
                     level: 1
