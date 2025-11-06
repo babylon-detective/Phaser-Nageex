@@ -830,7 +830,7 @@ export default class WorldScene extends Phaser.Scene {
                         Full party assembled!
                     </div>
                     <div style="color: white;">
-                        Press <span style="color: #FFD700; font-weight: bold;">U</span> to board
+                        Press <span style="color: #FFD700; font-weight: bold;">U</span> or <span style="color: #FFD700; font-weight: bold;">A Button</span> to board
                     </div>
                 `;
                 this.vehiclePrompt.style.display = 'block';
@@ -983,10 +983,10 @@ export default class WorldScene extends Phaser.Scene {
                 this.updateVehiclePrompt();
             }
             
-            // Check for U key to board vehicle (only if full party)
+            // Check for U key or A button (button 0) to board vehicle (only if full party)
             if (this.isNearVehicle && partyLeadershipManager.getPartySize() >= 4) {
                 const uKey = this.input.keyboard.addKey('U');
-                if (Phaser.Input.Keyboard.JustDown(uKey)) {
+                if (Phaser.Input.Keyboard.JustDown(uKey) || this.isGamepadButtonJustPressed(0)) {
                     this.boardFlyingVehicle();
                 }
             }
