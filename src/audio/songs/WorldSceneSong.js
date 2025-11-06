@@ -1,16 +1,16 @@
 import * as Tone from 'tone';
 
 /**
- * WORLD SCENE SONG - C minor Deep Ambient Composition
+ * WORLD SCENE SONG - C minor Rhythmic Composition with Jumpy Beat
  * 
  * Based on audio analysis:
  * - BPM: 79.7
  * - Key: C minor (C, D, Eb, F, G, Ab, Bb)
- * - Mood: Deep, sad, relaxing
- * - Structure: Continuous ambient loop with deep bass pulse
+ * - Mood: Deep, sad, relaxing with energetic rhythmic pulse
+ * - Structure: Continuous loop with jumpy, syncopated beat
  * 
  * A modular Tone.js composition for the overworld exploration.
- * Features deep bass with regular kick, ambient pads, and evolving texture.
+ * Features deep bass with jumpy kick pattern, rhythmic bass line, ambient pads, and evolving texture.
  */
 export class WorldSceneSong {
     constructor() {
@@ -23,6 +23,8 @@ export class WorldSceneSong {
         this.bass = null;
         this.subBass = null;
         this.kickDrum = null;
+        this.snare = null;
+        this.hiHat = null;
         this.melodySynth = null;
         
         // Effects
@@ -30,6 +32,7 @@ export class WorldSceneSong {
         this.delay = null;
         this.filter = null;
         this.volume = null;
+        this.compressor = null;
         
         // Song parts (Tone.js patterns/sequences)
         this.parts = [];
@@ -52,39 +55,39 @@ export class WorldSceneSong {
         this.padSynth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: 'sine' },
             envelope: {
-                attack: 3,      // Very slow attack for ambient feel
-                decay: 2,
-                sustain: 0.9,
-                release: 5      // Long release
+                attack: 2,      // Slower attack for ambient feel
+                decay: 1.5,
+                sustain: 0.8,
+                release: 4      // Long release
             }
         });
         
-        // Bass (square wave with filter for warmth)
+        // Bass (square wave with filter for warmth - more punchy)
         this.bass = new Tone.MonoSynth({
             oscillator: { type: 'square' },
             envelope: {
-                attack: 0.01,
-                decay: 0.4,
-                sustain: 0.5,
-                release: 0.6
+                attack: 0.005,  // Faster attack for punch
+                decay: 0.2,
+                sustain: 0.4,
+                release: 0.3    // Shorter release for rhythm
             },
             filterEnvelope: {
                 attack: 0.01,
-                decay: 0.3,
-                sustain: 0.6,
+                decay: 0.2,
+                sustain: 0.5,
                 baseFrequency: 150,
                 octaves: 2
             }
         });
         
-        // Sub-bass (deep sine for rumble - those downward spikes)
+        // Sub-bass (deep sine for rumble)
         this.subBass = new Tone.MonoSynth({
             oscillator: { type: 'sine' },
             envelope: {
-                attack: 0.02,
-                decay: 0.5,
-                sustain: 0.8,
-                release: 1.5
+                attack: 0.01,
+                decay: 0.3,
+                sustain: 0.7,
+                release: 0.8
             },
             filter: {
                 type: 'lowpass',
@@ -93,16 +96,46 @@ export class WorldSceneSong {
             }
         });
         
-        // Kick drum (low frequency sine pulse)
+        // Kick drum (punchy and tight)
         this.kickDrum = new Tone.MembraneSynth({
-            pitchDecay: 0.05,
-            octaves: 10,
+            pitchDecay: 0.08,   // More decay for punch
+            octaves: 8,
             oscillator: { type: 'sine' },
             envelope: {
                 attack: 0.001,
-                decay: 0.4,
+                decay: 0.3,     // Tighter decay
                 sustain: 0.01,
-                release: 1.4
+                release: 0.8
+            }
+        });
+        
+        // Snare (for rhythmic accent)
+        this.snare = new Tone.NoiseSynth({
+            noise: { type: 'white' },
+            envelope: {
+                attack: 0.001,
+                decay: 0.15,
+                sustain: 0,
+                release: 0.1
+            },
+            filter: {
+                type: 'highpass',
+                frequency: 2000
+            }
+        });
+        
+        // Hi-hat (for rhythmic texture)
+        this.hiHat = new Tone.NoiseSynth({
+            noise: { type: 'pink' },
+            envelope: {
+                attack: 0.001,
+                decay: 0.05,
+                sustain: 0,
+                release: 0.02
+            },
+            filter: {
+                type: 'highpass',
+                frequency: 8000
             }
         });
         
@@ -110,38 +143,48 @@ export class WorldSceneSong {
         this.melodySynth = new Tone.Synth({
             oscillator: { type: 'triangle' },
             envelope: {
-                attack: 0.5,
-                decay: 0.3,
+                attack: 0.3,
+                decay: 0.2,
                 sustain: 0.4,
-                release: 2
+                release: 1.5
             }
         });
         
         // Effects chain
         this.reverb = new Tone.Reverb({
-            decay: 6,      // Longer reverb for more space
-            wet: 0.5       // More reverb for ambient feel
+            decay: 4,      // Moderate reverb
+            wet: 0.3       // Less reverb for clarity
         }).toDestination();
         
         this.delay = new Tone.FeedbackDelay({
-            delayTime: '4n',
-            feedback: 0.4,
-            wet: 0.3
+            delayTime: '8n',  // Shorter delay for rhythm
+            feedback: 0.3,
+            wet: 0.2
         }).connect(this.reverb);
         
         this.filter = new Tone.Filter({
-            frequency: 3000,
+            frequency: 4000,  // Higher cutoff for brightness
             type: 'lowpass',
             rolloff: -12
         }).connect(this.delay);
         
-        this.volume = new Tone.Volume(-10).connect(this.filter); // Background level
+        // Compressor for punch
+        this.compressor = new Tone.Compressor({
+            threshold: -20,
+            ratio: 4,
+            attack: 0.003,
+            release: 0.1
+        }).connect(this.filter);
+        
+        this.volume = new Tone.Volume(-10).connect(this.compressor);
         
         // Connect instruments to effects
         this.padSynth.connect(this.reverb);  // Pads direct to reverb
         this.bass.connect(this.volume);
         this.subBass.connect(this.volume);
         this.kickDrum.connect(this.volume);
+        this.snare.connect(this.volume);
+        this.hiHat.connect(this.volume);
         this.melodySynth.connect(this.delay);
         
         // Generate reverb impulse
@@ -196,39 +239,107 @@ export class WorldSceneSong {
         const chords = this.getCMinorChords();
         const scale = this.getCMinorScale();
         
-        // ===== DEEP BASS WITH REGULAR KICK (those downward spikes) =====
+        // ===== JUMPY KICK PATTERN - SYNCOPATED AND ENERGETIC =====
         
-        // Kick drum pattern - regular pulse (every 2 beats)
-        const kickPattern = new Tone.Sequence((time) => {
-            this.kickDrum.triggerAttackRelease('C1', '8n', time);
-        }, [1, 0, 1, 0], '2n'); // Kick on beats 1 and 3
+        // Kick drum pattern - jumpy syncopated pattern
+        // Pattern: Kick on 1, 2-and, 3, 4-and (creates jumpy feel)
+        const kickPattern = new Tone.Sequence((time, note) => {
+            if (note) {
+                this.kickDrum.triggerAttackRelease('C1', '8n', time, note.velocity || 0.8);
+            }
+        }, [
+            { note: 'C1', velocity: 1.0 },    // Beat 1 - strong
+            { note: 'C1', velocity: 0.6 },    // Beat 2 - medium
+            null,                              // 2-and - skip
+            { note: 'C1', velocity: 0.7 },    // Beat 3 - medium-strong
+            null,                              // 3-and - skip
+            { note: 'C1', velocity: 0.5 },    // Beat 4 - lighter
+            null,                              // 4-and - skip
+            { note: 'C1', velocity: 0.6 }     // Off-beat accent
+        ], '8n'); // 8th note grid for syncopation
         kickPattern.start(0);
         this.parts.push(kickPattern);
         
-        // Sub-bass pattern - deep rumble (syncs with kick)
+        // Snare pattern - on 2 and 4 with off-beat accents
+        const snarePattern = new Tone.Sequence((time, note) => {
+            if (note) {
+                this.snare.triggerAttackRelease('8n', time, note.velocity || 0.5);
+            }
+        }, [
+            null,                              // Beat 1
+            { note: 'snare', velocity: 0.8 }, // Beat 2 - strong
+            null,                              // 2-and
+            null,                              // Beat 3
+            { note: 'snare', velocity: 0.7 }, // Beat 4 - medium
+            null,                              // 4-and
+            null,                              // Beat 1 (next bar)
+            { note: 'snare', velocity: 0.4 }  // Off-beat ghost note
+        ], '8n');
+        snarePattern.start(0);
+        this.parts.push(snarePattern);
+        
+        // Hi-hat pattern - continuous 8th notes with accents
+        const hiHatPattern = new Tone.Sequence((time, note) => {
+            if (note) {
+                this.hiHat.triggerAttackRelease('16n', time, note.velocity || 0.3);
+            }
+        }, [
+            { note: 'hat', velocity: 0.4 },    // Beat 1
+            { note: 'hat', velocity: 0.3 },    // 1-and
+            { note: 'hat', velocity: 0.5 },   // Beat 2 - accent
+            { note: 'hat', velocity: 0.3 },   // 2-and
+            { note: 'hat', velocity: 0.4 },   // Beat 3
+            { note: 'hat', velocity: 0.3 },   // 3-and
+            { note: 'hat', velocity: 0.5 },   // Beat 4 - accent
+            { note: 'hat', velocity: 0.3 }    // 4-and
+        ], '8n');
+        hiHatPattern.start(0);
+        this.parts.push(hiHatPattern);
+        
+        // Sub-bass pattern - syncs with kick but with variation
         const subBassPattern = new Tone.Sequence((time, note) => {
             if (note) {
-                this.subBass.triggerAttackRelease(note, '4n', time);
+                this.subBass.triggerAttackRelease(note, '8n', time);
             }
-        }, ['C1', null, 'C1', null, 'Eb1', null, 'C1', null], '2n');
+        }, [
+            'C1', null, 'C1', null, 'Eb1', null, 'C1', 'G1'
+        ], '8n');
         subBassPattern.start(0);
         this.parts.push(subBassPattern);
         
-        // Bass line - slow, deep progression
+        // ===== RHYTHMIC BASS LINE - BOUNCY AND PUNCHY =====
+        
+        // Bass line - shorter, more rhythmic notes
         const bassLine = new Tone.Part((time, note) => {
-            this.bass.triggerAttackRelease(note.pitch, note.duration, time);
+            this.bass.triggerAttackRelease(note.pitch, note.duration, time, note.velocity || 0.7);
         }, [
-            { time: '0:0:0', pitch: 'C2', duration: '2m' },
-            { time: '2:0:0', pitch: 'Eb2', duration: '2m' },
-            { time: '4:0:0', pitch: 'F2', duration: '2m' },
-            { time: '6:0:0', pitch: 'G2', duration: '2m' },
-            { time: '8:0:0', pitch: 'Ab2', duration: '2m' },
-            { time: '10:0:0', pitch: 'Bb2', duration: '2m' },
-            { time: '12:0:0', pitch: 'C2', duration: '2m' },
-            { time: '14:0:0', pitch: 'G2', duration: '2m' }
+            // Bar 1
+            { time: '0:0:0', pitch: 'C2', duration: '4n', velocity: 0.9 },
+            { time: '0:1:0', pitch: 'C2', duration: '8n', velocity: 0.6 },
+            { time: '0:1:2', pitch: 'Eb2', duration: '8n', velocity: 0.7 },
+            { time: '0:2:0', pitch: 'C2', duration: '4n', velocity: 0.8 },
+            { time: '0:3:0', pitch: 'G2', duration: '4n', velocity: 0.7 },
+            // Bar 2
+            { time: '1:0:0', pitch: 'F2', duration: '4n', velocity: 0.8 },
+            { time: '1:1:0', pitch: 'F2', duration: '8n', velocity: 0.6 },
+            { time: '1:1:2', pitch: 'Ab2', duration: '8n', velocity: 0.7 },
+            { time: '1:2:0', pitch: 'F2', duration: '4n', velocity: 0.8 },
+            { time: '1:3:0', pitch: 'C2', duration: '4n', velocity: 0.7 },
+            // Bar 3
+            { time: '2:0:0', pitch: 'G2', duration: '4n', velocity: 0.9 },
+            { time: '2:1:0', pitch: 'G2', duration: '8n', velocity: 0.6 },
+            { time: '2:1:2', pitch: 'Bb2', duration: '8n', velocity: 0.7 },
+            { time: '2:2:0', pitch: 'G2', duration: '4n', velocity: 0.8 },
+            { time: '2:3:0', pitch: 'D2', duration: '4n', velocity: 0.7 },
+            // Bar 4
+            { time: '3:0:0', pitch: 'Ab2', duration: '4n', velocity: 0.8 },
+            { time: '3:1:0', pitch: 'Ab2', duration: '8n', velocity: 0.6 },
+            { time: '3:1:2', pitch: 'C3', duration: '8n', velocity: 0.7 },
+            { time: '3:2:0', pitch: 'Ab2', duration: '4n', velocity: 0.8 },
+            { time: '3:3:0', pitch: 'Eb2', duration: '4n', velocity: 0.7 }
         ]);
         bassLine.loop = true;
-        bassLine.loopEnd = '16m';
+        bassLine.loopEnd = '4m';
         bassLine.start(0);
         this.parts.push(bassLine);
         
@@ -248,21 +359,23 @@ export class WorldSceneSong {
         padChords.start(0);
         this.parts.push(padChords);
         
-        // ===== SUBTLE MELODY - SPARSE AND MELANCHOLIC =====
+        // ===== RHYTHMIC MELODY - MORE ACTIVE =====
         
-        // Sparse melody (evolving density)
+        // More active melody with rhythmic placement
         const melody = new Tone.Part((time, note) => {
             this.melodySynth.triggerAttackRelease(note.pitch, note.duration, time, note.velocity);
         }, [
-            { time: '2:0:0', pitch: 'Eb4', duration: '1m', velocity: 0.3 },
-            { time: '4:0:0', pitch: 'G4', duration: '2m', velocity: 0.3 },
-            { time: '7:0:0', pitch: 'F4', duration: '1m', velocity: 0.25 },
-            { time: '9:0:0', pitch: 'Ab4', duration: '2m', velocity: 0.3 },
-            { time: '12:0:0', pitch: 'C5', duration: '1m', velocity: 0.3 },
-            { time: '14:0:0', pitch: 'Bb4', duration: '2m', velocity: 0.25 }
+            { time: '0:2:0', pitch: 'Eb4', duration: '8n', velocity: 0.4 },
+            { time: '0:3:0', pitch: 'G4', duration: '4n', velocity: 0.5 },
+            { time: '1:1:2', pitch: 'F4', duration: '8n', velocity: 0.4 },
+            { time: '1:2:2', pitch: 'Ab4', duration: '8n', velocity: 0.5 },
+            { time: '2:0:2', pitch: 'C5', duration: '8n', velocity: 0.4 },
+            { time: '2:2:0', pitch: 'Bb4', duration: '4n', velocity: 0.5 },
+            { time: '3:1:0', pitch: 'G4', duration: '8n', velocity: 0.4 },
+            { time: '3:3:2', pitch: 'Eb4', duration: '8n', velocity: 0.4 }
         ]);
         melody.loop = true;
-        melody.loopEnd = '16m';
+        melody.loopEnd = '4m';
         melody.start(0);
         this.parts.push(melody);
         
@@ -270,7 +383,7 @@ export class WorldSceneSong {
         Tone.Transport.start();
         this.isPlaying = true;
         
-        console.log(`[WorldSceneSong] ▶️ Playing (${this.key}, ${this.bpm} BPM, looping)`);
+        console.log(`[WorldSceneSong] ▶️ Playing (${this.key}, ${this.bpm} BPM, jumpy beat, looping)`);
     }
     
     /**
@@ -309,12 +422,15 @@ export class WorldSceneSong {
         if (this.bass) this.bass.dispose();
         if (this.subBass) this.subBass.dispose();
         if (this.kickDrum) this.kickDrum.dispose();
+        if (this.snare) this.snare.dispose();
+        if (this.hiHat) this.hiHat.dispose();
         if (this.melodySynth) this.melodySynth.dispose();
         
         // Dispose effects
         if (this.reverb) this.reverb.dispose();
         if (this.delay) this.delay.dispose();
         if (this.filter) this.filter.dispose();
+        if (this.compressor) this.compressor.dispose();
         if (this.volume) this.volume.dispose();
         
         // Reset references
@@ -322,10 +438,13 @@ export class WorldSceneSong {
         this.bass = null;
         this.subBass = null;
         this.kickDrum = null;
+        this.snare = null;
+        this.hiHat = null;
         this.melodySynth = null;
         this.reverb = null;
         this.delay = null;
         this.filter = null;
+        this.compressor = null;
         this.volume = null;
         
         console.log('[WorldSceneSong] Disposed');
