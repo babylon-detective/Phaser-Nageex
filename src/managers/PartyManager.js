@@ -14,12 +14,19 @@ export default class PartyManager {
     init() {
         console.log('[PartyManager] Initializing party system');
         
-        // Create recruitable NPCs in the world
-        this.createRecruitableNPCs();
+        // Get list of already-recruited NPC IDs from PartyLeadershipManager
+        const party = partyLeadershipManager.getParty();
+        const recruitedIds = party.filter(m => m.type === 'npc').map(m => m.id);
+        
+        console.log('[PartyManager] Already recruited NPCs:', recruitedIds);
+        
+        // Create recruitable NPCs in the world (excluding already-recruited)
+        this.createRecruitableNPCs(recruitedIds);
     }
 
-    createRecruitableNPCs() {
+    createRecruitableNPCs(excludeIds = []) {
         console.log('[PartyManager] Creating recruitable NPCs');
+        console.log('[PartyManager] Excluding already-recruited IDs:', excludeIds);
 
         // Define recruitable character data
         const recruitables = [
@@ -88,9 +95,15 @@ export default class PartyManager {
             }
         ];
 
-        // Create each recruitable NPC
+        // Create each recruitable NPC (skip already-recruited ones)
         recruitables.forEach(data => {
-            this.createRecruitableNPC(data);
+            if (excludeIds.includes(data.id)) {
+                console.log(`[PartyManager] Skipping ${data.name} - already recruited`);
+                // Store the data but don't create sprite (they're in the party)
+                this.recruitableNPCs.set(data.id, { ...data, gameObject: null, recruited: true });
+            } else {
+                this.createRecruitableNPC(data);
+            }
         });
     }
 

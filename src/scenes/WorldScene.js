@@ -209,6 +209,9 @@ export default class WorldScene extends Phaser.Scene {
             this.npcManager.npcs.push(npc);
         });
         console.log('[WorldScene] Added recruitable NPCs to NPC manager:', recruitableNPCs.length);
+        
+        // CRITICAL: Create sprites for already-recruited party members (from loaded save)
+        this.createRecruitedMemberSprites();
 
         // Create HUD
         this.hudManager = new HUDManager(this);
@@ -735,6 +738,77 @@ export default class WorldScene extends Phaser.Scene {
         this.savePointZone.body.moves = false;
         
         console.log('[WorldScene] Save point created at:', { x, y });
+    }
+    
+    /**
+     * Create sprites for already-recruited party members (from loaded save)
+     * Called after PartyManager init to create visual representations
+     */
+    createRecruitedMemberSprites() {
+        console.log('[WorldScene] ========== CREATING RECRUITED MEMBER SPRITES ==========');
+        
+        const party = partyLeadershipManager.getParty();
+        const recruitedMembers = party.filter(m => m.type === 'npc');
+        
+        console.log('[WorldScene] Found', recruitedMembers.length, 'recruited members in party');
+        
+        recruitedMembers.forEach((member, index) => {
+            console.log(`[WorldScene] Creating sprite for recruited member: ${member.name} (${member.id})`);
+            
+            // Get NPC data from PartyManager
+            const npcData = this.partyManager.getRecruitableNPC(member.id);
+            if (!npcData) {
+                console.warn(`[WorldScene] No NPC data found for ${member.id}`);
+                return;
+            }
+            
+            // Position near player (will be arranged by following system)
+            const playerPos = this.playerManager.player;
+            const offsetX = -60 * (index + 1); // Stack to the left
+            const x = playerPos.x + offsetX;
+            const y = playerPos.y;
+            
+            // Create NPC body sprite
+            const sprite = this.add.rectangle(x, y, 32, 64, member.color);
+            this.physics.add.existing(sprite);
+            sprite.body.setCollideWorldBounds(true);
+            
+            // Create direction indicator
+            const indicator = this.add.circle(
+                x,
+                y - 40,
+                10,
+                member.indicatorColor
+            );
+            indicator.setDepth(1000);
+            
+            console.log(`[WorldScene]   ✅ Created sprite for ${member.name} at (${x}, ${y})`);
+            
+            // Update PartyManager with the sprite reference
+            npcData.gameObject = sprite;
+            npcData.indicator = indicator;
+            npcData.recruited = true;
+            
+            // Apply saved HP state if damaged
+            if (member.stats.health < member.stats.maxHealth) {
+                console.log(`[WorldScene]   ⚠️ ${member.name} has reduced HP: ${member.stats.health}/${member.stats.maxHealth}`);
+                npcData.stats.health = member.stats.health;
+            }
+            
+            // Apply downed state if HP is 0
+            if (member.stats.health <= 0) {
+                console.log(`[WorldScene]   💀 ${member.name} is DOWNED`);
+                npcData.isDowned = true;
+                sprite.setAlpha(0.5);
+            }
+            
+            // Update PartyLeadershipManager with sprite references
+            partyLeadershipManager.updateSpriteReference(member.id, sprite, indicator);
+            
+            console.log(`[WorldScene]   ✅ Updated managers with sprite references`);
+        });
+        
+        console.log('[WorldScene] =============================================');
     }
     
     createFlyingVehicle(x, y) {
