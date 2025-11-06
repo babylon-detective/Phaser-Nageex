@@ -127,7 +127,7 @@ const config = {
         }
     },
     input: {
-        gamepad: true // Enable gamepad support
+        gamepad: false // Disable Phaser's gamepad plugin - using native Gamepad API instead
     },
     scene: [StartScene, WorldScene, BattleScene, BattleMenuScene, ShooterScene, MapScene, MenuScene]
 };

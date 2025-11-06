@@ -901,7 +901,7 @@ export default class MenuScene extends Phaser.Scene {
             }
             
             // Also update tab content periodically to reflect any changes
-            this.updateTabContent();
+            this.updateCharacterContent();
         }, 100); // Update 10 times per second for smooth display
     }
 

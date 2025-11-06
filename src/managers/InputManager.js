@@ -39,6 +39,12 @@ export default class InputManager {
         this.gamepadDeadzone = 0.15; // Deadzone for analog sticks
         this.gamepadButtonStates = {}; // Track button states for justDown detection
         
+        // Store gamepad plugin event listeners for cleanup
+        this.gamepadConnectedListener = null;
+        this.gamepadDisconnectedListener = null;
+        this.browserConnectedListener = null;
+        this.browserDisconnectedListener = null;
+        
         // Initialize gamepad if available
         this.initGamepad();
     }
@@ -116,53 +122,62 @@ export default class InputManager {
             console.warn('[InputManager] Error accessing gamepads:', e);
         }
 
-        // Enable gamepad plugin if not already enabled
+        // Check if Phaser gamepad plugin is available (may be disabled)
         if (!this.scene.input.gamepad) {
-            console.warn('[InputManager] Phaser gamepad plugin not available');
-            return;
-        }
-
-        // Ensure gamepad is enabled
-        if (!this.scene.input.gamepad.enabled) {
-            this.scene.input.gamepad.enabled = true;
-        }
-
-        // Listen for gamepad connections
-        this.scene.input.gamepad.on('connected', (pad) => {
-            console.log('[InputManager] Gamepad connected via Phaser:', pad.id);
-            this.gamepad = pad;
-            this.gamepadConnected = true;
-            this.debugGamepad();
-        });
-
-        // Listen for gamepad disconnections
-        this.scene.input.gamepad.on('disconnected', (pad) => {
-            console.log('[InputManager] Gamepad disconnected:', pad.id);
-            if (this.gamepad === pad) {
-                this.gamepad = null;
-                this.gamepadConnected = false;
+            console.warn('[InputManager] Phaser gamepad plugin not available - using native Gamepad API only');
+            // Continue with browser API fallback
+        } else {
+            // Enable gamepad plugin if not already enabled
+            if (!this.scene.input.gamepad.enabled) {
+                this.scene.input.gamepad.enabled = true;
             }
-        });
+
+            // Listen for gamepad connections
+            this.gamepadConnectedListener = (pad) => {
+                console.log('[InputManager] Gamepad connected via Phaser:', pad.id);
+                this.gamepad = pad;
+                this.gamepadConnected = true;
+                this.debugGamepad();
+            };
+            this.scene.input.gamepad.on('connected', this.gamepadConnectedListener);
+
+            // Listen for gamepad disconnections
+            this.gamepadDisconnectedListener = (pad) => {
+                console.log('[InputManager] Gamepad disconnected:', pad.id);
+                if (this.gamepad === pad) {
+                    this.gamepad = null;
+                    this.gamepadConnected = false;
+                }
+            };
+            this.scene.input.gamepad.on('disconnected', this.gamepadDisconnectedListener);
+        }
 
         // Also listen to browser gamepad events as fallback
-        window.addEventListener('gamepadconnected', (e) => {
+        this.browserConnectedListener = (e) => {
             console.log('[InputManager] Browser gamepad connected:', e.gamepad.id);
             this.pollGamepad(); // Start polling
-        });
+        };
+        window.addEventListener('gamepadconnected', this.browserConnectedListener);
 
-        window.addEventListener('gamepaddisconnected', (e) => {
+        this.browserDisconnectedListener = (e) => {
             console.log('[InputManager] Browser gamepad disconnected:', e.gamepad.id);
             this.gamepad = null;
             this.gamepadConnected = false;
-        });
+        };
+        window.addEventListener('gamepaddisconnected', this.browserDisconnectedListener);
 
-        // Check if gamepad is already connected (Phaser way)
-        const phaserGamepads = this.scene.input.gamepad.gamepads;
-        if (phaserGamepads && phaserGamepads.length > 0) {
-            this.gamepad = phaserGamepads[0];
-            this.gamepadConnected = true;
-            console.log('[InputManager] Using already connected Phaser gamepad:', this.gamepad.id);
-            this.debugGamepad();
+        // Check if gamepad is already connected (Phaser way, if plugin is enabled)
+        if (this.scene.input.gamepad) {
+            const phaserGamepads = this.scene.input.gamepad.gamepads;
+            if (phaserGamepads && phaserGamepads.length > 0) {
+                this.gamepad = phaserGamepads[0];
+                this.gamepadConnected = true;
+                console.log('[InputManager] Using already connected Phaser gamepad:', this.gamepad.id);
+                this.debugGamepad();
+            } else {
+                // Try browser API directly
+                this.pollGamepad();
+            }
         } else {
             // Try browser API directly
             this.pollGamepad();
@@ -867,13 +882,35 @@ export default class InputManager {
         // Stop polling
         this.stopGamepadPolling();
 
-        // Remove browser event listeners
-        window.removeEventListener('gamepadconnected', this.pollGamepad);
-        window.removeEventListener('gamepaddisconnected', this.pollGamepad);
+        // Remove Phaser gamepad plugin event listeners
+        if (this.scene && this.scene.input && this.scene.input.gamepad) {
+            try {
+                if (this.gamepadConnectedListener) {
+                    this.scene.input.gamepad.off('connected', this.gamepadConnectedListener);
+                    this.gamepadConnectedListener = null;
+                }
+                if (this.gamepadDisconnectedListener) {
+                    this.scene.input.gamepad.off('disconnected', this.gamepadDisconnectedListener);
+                    this.gamepadDisconnectedListener = null;
+                }
+            } catch (e) {
+                console.warn('[InputManager] Error removing gamepad plugin listeners:', e);
+            }
+        }
 
-        // Gamepad cleanup handled automatically by Phaser
-        // Just clear our reference
-        // (Don't null gamepad here as it may still be connected)
+        // Remove browser event listeners
+        if (this.browserConnectedListener) {
+            window.removeEventListener('gamepadconnected', this.browserConnectedListener);
+            this.browserConnectedListener = null;
+        }
+        if (this.browserDisconnectedListener) {
+            window.removeEventListener('gamepaddisconnected', this.browserDisconnectedListener);
+            this.browserDisconnectedListener = null;
+        }
+
+        // Clear gamepad reference
+        this.gamepad = null;
+        this.gamepadConnected = false;
     }
 
     /**
