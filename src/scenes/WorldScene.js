@@ -449,18 +449,19 @@ export default class WorldScene extends Phaser.Scene {
             // Initialize sound system first
             await soundManager.init();
             
+            // DISABLED: WorldSceneSong for SFX testing
             // Create and play world scene song
-            this.worldSceneSong = new WorldSceneSong();
-            await this.worldSceneSong.play();
+            // this.worldSceneSong = new WorldSceneSong();
+            // await this.worldSceneSong.play();
             
             // Initialize and setup world scene SFX
             this.worldSceneSFX = new WorldSceneSFX();
             await this.worldSceneSFX.init();
             
             this.soundInitialized = true;
-            console.log('[WorldScene] ✅ Music and SFX started immediately');
+            console.log('[WorldScene] ✅ SFX started (music disabled for testing)');
         } catch (error) {
-            console.log('[WorldScene] ⏸️ Waiting for user interaction to start music');
+            console.log('[WorldScene] ⏸️ Waiting for user interaction to start SFX');
         }
     }
     
@@ -1474,16 +1475,16 @@ export default class WorldScene extends Phaser.Scene {
             this.cameras.main.startFollow(this.playerManager.player);
         }
         
-        // Resume background music when returning to scene
-        if (this.worldSceneSong && !this.worldSceneSong.isPlaying) {
-            this.worldSceneSong.play();
-            console.log('[WorldScene] Music resumed (scene resumed)');
-        } else if (!this.worldSceneSong && this.soundInitialized) {
-            // Recreate song if it was disposed
-            this.worldSceneSong = new WorldSceneSong();
-            this.worldSceneSong.play();
-            console.log('[WorldScene] Music recreated and started (scene resumed)');
-        }
+        // DISABLED: Resume background music when returning to scene (for SFX testing)
+        // if (this.worldSceneSong && !this.worldSceneSong.isPlaying) {
+        //     this.worldSceneSong.play();
+        //     console.log('[WorldScene] Music resumed (scene resumed)');
+        // } else if (!this.worldSceneSong && this.soundInitialized) {
+        //     // Recreate song if it was disposed
+        //     this.worldSceneSong = new WorldSceneSong();
+        //     this.worldSceneSong.play();
+        //     console.log('[WorldScene] Music recreated and started (scene resumed)');
+        // }
     }
 
     startDefeatedNpcAnimation(defeatedNpcIds) {
@@ -1521,11 +1522,11 @@ export default class WorldScene extends Phaser.Scene {
 
     pause() {
         console.log('WorldScene paused');
-        // Stop background music when leaving scene
-        if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
-            this.worldSceneSong.stop();
-            console.log('[WorldScene] Music stopped (scene paused)');
-        }
+        // DISABLED: Stop background music when leaving scene (for SFX testing)
+        // if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
+        //     this.worldSceneSong.stop();
+        //     console.log('[WorldScene] Music stopped (scene paused)');
+        // }
         // Stop walking sound when leaving scene (prevents it from continuing in BattleScene)
         if (this.worldSceneSFX) {
             this.worldSceneSFX.stopWalking();
@@ -1687,11 +1688,11 @@ export default class WorldScene extends Phaser.Scene {
         
         console.log('[WorldScene] Storing player position for return:', playerPosition);
         
-        // CRITICAL: Stop WorldSceneSong before entering battle
-        if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
-            this.worldSceneSong.stop();
-            console.log('[WorldScene] WorldSceneSong stopped (entering battle)');
-        }
+        // DISABLED: Stop WorldSceneSong before entering battle (for SFX testing)
+        // if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
+        //     this.worldSceneSong.stop();
+        //     console.log('[WorldScene] WorldSceneSong stopped (entering battle)');
+        // }
         
         // Pause this scene instead of stopping it
         this.scene.pause();
