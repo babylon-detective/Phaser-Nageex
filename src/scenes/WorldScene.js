@@ -1122,6 +1122,34 @@ export default class WorldScene extends Phaser.Scene {
         // Update charge gauge
         this.updateChargeGauge();
         
+        // Update walking sound based on player movement
+        if (this.playerManager && this.playerManager.controls && this.worldSceneSFX) {
+            const controls = this.playerManager.controls;
+            const isMoving = (controls.wasdKeys && (
+                controls.wasdKeys.left.isDown ||
+                controls.wasdKeys.right.isDown ||
+                controls.wasdKeys.up.isDown ||
+                controls.wasdKeys.down.isDown
+            )) || (controls.gamepad && controls.gamepad.axes && (
+                Math.abs(controls.gamepad.axes[0] || 0) > 0.3 ||
+                Math.abs(controls.gamepad.axes[1] || 0) > 0.3
+            ));
+            
+            // Check if player is moving (not running, not charging)
+            if (isMoving && !controls.isRunning && !controls.isCharging) {
+                this.worldSceneSFX.startWalking();
+            } else {
+                this.worldSceneSFX.stopWalking();
+            }
+            
+            // Update sprint charge sound
+            if (controls.isCharging) {
+                this.worldSceneSFX.startSprintCharge();
+            } else {
+                this.worldSceneSFX.stopSprintCharge();
+            }
+        }
+        
         // Check if player is on save point
         if (this.playerManager && this.playerManager.player && this.savePointZone) {
             const distance = Phaser.Math.Distance.Between(
@@ -1620,6 +1648,11 @@ export default class WorldScene extends Phaser.Scene {
     startBattle(npcDataArray) {
         console.log('[WorldScene] ========== STARTING BATTLE ==========');
         console.log('[WorldScene] NPC data:', npcDataArray);
+        
+        // Play encounter sound effect
+        if (this.worldSceneSFX) {
+            this.worldSceneSFX.playEncounter();
+        }
         
         if (!npcDataArray) {
             console.error('[WorldScene] No NPC data provided for battle');

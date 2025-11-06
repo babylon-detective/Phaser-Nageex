@@ -2488,6 +2488,13 @@ export default class BattleScene extends Phaser.Scene {
                 
                 // Apply HP damage to the target
                 if (isPlayer) {
+                    // Play damage sound
+                    if (this.battleSceneSFX) {
+                        this.battleSceneSFX.playHit();
+                    } else {
+                        soundManager.playHit(); // Fallback
+                    }
+                    
                     // Damage player
                     this.currentHP = Math.max(0, this.currentHP - damage);
                     console.log(`[NPC AI] Player HP: ${this.currentHP}/${this.maxHP}`);
@@ -2495,6 +2502,13 @@ export default class BattleScene extends Phaser.Scene {
                     // Save health to gameStateManager immediately
                     gameStateManager.updatePlayerHealth(this.currentHP);
                 } else {
+                    // Play damage sound for party member
+                    if (this.battleSceneSFX) {
+                        this.battleSceneSFX.playHit();
+                    } else {
+                        soundManager.playHit(); // Fallback
+                    }
+                    
                     // Damage party member
                     if (targetChar.memberData) {
                         targetChar.memberData.currentHP = Math.max(0, targetChar.memberData.currentHP - damage);
