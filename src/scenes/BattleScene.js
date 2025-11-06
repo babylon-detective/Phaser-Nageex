@@ -9,6 +9,7 @@ import { moneyManager } from "../managers/MoneyManager.js";
 import { itemsManager } from "../managers/ItemsManager.js";
 import { soundManager } from "../managers/SoundManager.js";
 import { BattleSceneSFX } from "../audio/sfx/BattleSceneSFX.js";
+import { BattleSceneSong } from "../audio/songs/BattleSceneSong.js";
 
 export default class BattleScene extends Phaser.Scene {
     constructor() {
@@ -60,6 +61,10 @@ export default class BattleScene extends Phaser.Scene {
         
         // Sound effects
         this.battleSceneSFX = null;
+        
+        // Background music
+        this.battleSceneSong = null;
+        this.soundInitialized = false;
         
         // Face Button Controls (U/I/O/P for each character)
         this.faceButtons = {
@@ -228,6 +233,9 @@ export default class BattleScene extends Phaser.Scene {
                 // Initialize sound effects
                 await this.initializeSFX();
                 
+                // Initialize and start battle music
+                await this.initializeMusic();
+                
                 // Start battle immediately (no dialogue at start)
                 this.setupBattle();
             }
@@ -249,6 +257,27 @@ export default class BattleScene extends Phaser.Scene {
             console.log('[BattleScene] ✅ SFX initialized');
         } catch (error) {
             console.error('[BattleScene] Failed to initialize SFX:', error);
+        }
+    }
+    
+    /**
+     * Initialize and play battle scene music
+     */
+    async initializeMusic() {
+        if (this.soundInitialized) return;
+        
+        try {
+            // Initialize sound system first
+            await soundManager.init();
+            
+            // Create and play battle scene song
+            this.battleSceneSong = new BattleSceneSong();
+            await this.battleSceneSong.play();
+            
+            this.soundInitialized = true;
+            console.log('[BattleScene] ✅ Music started');
+        } catch (error) {
+            console.log('[BattleScene] ⏸️ Waiting for user interaction to start music');
         }
     }
 
@@ -1475,6 +1504,11 @@ export default class BattleScene extends Phaser.Scene {
     showRecruitmentVictorySequence(npcData) {
         console.log('[BattleScene] Starting recruitment victory sequence for:', npcData.name);
         
+        // Stop battle music and play recruitment tune
+        if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+            this.battleSceneSong.playRecruitmentTune();
+        }
+        
         // Disable input during victory sequence
         this.input.enabled = false;
         this.isVictorySequence = true;
@@ -1898,6 +1932,12 @@ export default class BattleScene extends Phaser.Scene {
         this.isReturning = true;
 
         console.log('[BattleScene] Returning to world');
+        
+        // Stop battle music when escaping
+        if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+            this.battleSceneSong.stop();
+            console.log('[BattleScene] BattleSceneSong stopped (escaping)');
+        }
         
         // Get updated HP states for all party members
         const hpStates = this.getUpdatedPartyHPStates();
@@ -4841,6 +4881,12 @@ export default class BattleScene extends Phaser.Scene {
         if (this.isPaused) {
             console.log('[BattleScene] ⏸️ GAME PAUSED (Enter/Start)');
             
+            // Stop background music when pausing
+            if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+                this.battleSceneSong.stop();
+                console.log('[BattleScene] Music stopped (scene paused)');
+            }
+            
             // Pause the game timer
             gameStateManager.pauseTimer();
             
@@ -4860,6 +4906,17 @@ export default class BattleScene extends Phaser.Scene {
             
             // Resume the scene
             this.scene.resume();
+            
+            // Resume background music when resuming
+            if (this.battleSceneSong && !this.battleSceneSong.isPlaying) {
+                this.battleSceneSong.play();
+                console.log('[BattleScene] Music resumed (scene resumed)');
+            } else if (!this.battleSceneSong && this.soundInitialized) {
+                // Recreate song if it was disposed
+                this.battleSceneSong = new BattleSceneSong();
+                this.battleSceneSong.play();
+                console.log('[BattleScene] Music recreated and started (scene resumed)');
+            }
         }
     }
     
@@ -4951,6 +5008,13 @@ export default class BattleScene extends Phaser.Scene {
             this.battleSceneSFX.dispose();
             this.battleSceneSFX = null;
             console.log('[BattleScene] SFX disposed (scene shutdown)');
+        }
+        
+        // Clean up background music
+        if (this.battleSceneSong) {
+            this.battleSceneSong.dispose();
+            this.battleSceneSong = null;
+            console.log('[BattleScene] Music disposed (scene shutdown)');
         }
         
         // Disable input
@@ -5437,6 +5501,11 @@ export default class BattleScene extends Phaser.Scene {
 
     showVictorySequence() {
         console.log('[BattleScene] Starting victory sequence');
+        
+        // Stop battle music and play victory tune
+        if (this.battleSceneSong && this.battleSceneSong.isPlaying) {
+            this.battleSceneSong.playVictoryTune();
+        }
         
         // Play victory sound
         if (this.battleSceneSFX) {
