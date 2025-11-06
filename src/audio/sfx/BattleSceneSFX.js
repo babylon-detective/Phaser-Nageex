@@ -26,6 +26,10 @@ export class BattleSceneSFX {
         this.projectile = null;
         this.block = null;
         this.critical = null;
+        this.apCharge = null;
+        
+        // AP charge sound state
+        this.isChargingAP = false;
         
         console.log('[BattleSceneSFX] Created (not initialized)');
     }
@@ -111,6 +115,13 @@ export class BattleSceneSFX {
             envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.8 }
         }).toDestination();
         this.critical.volume.value = this.volume + 2; // Louder for emphasis
+        
+        // AP charge sound (continuous while charging AP)
+        this.apCharge = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+        }).toDestination();
+        this.apCharge.volume.value = this.volume - 3; // Quieter for continuous sound
         
         this.initialized = true;
         console.log('[BattleSceneSFX] ✅ Sound effects ready');
@@ -202,6 +213,35 @@ export class BattleSceneSFX {
     }
     
     /**
+     * Start AP charge sound (continuous while charging AP)
+     */
+    startAPCharge() {
+        if (!this.initialized || this.isChargingAP) return;
+        this.isChargingAP = true;
+        // Start continuous synth that increases in pitch as AP charges
+        if (this.apCharge) {
+            // Start at low frequency (E3)
+            this.apCharge.triggerAttack('E3');
+            // Gradually increase frequency as AP charges (E3 to E5)
+            const startFreq = Tone.Frequency('E3').toFrequency();
+            const endFreq = Tone.Frequency('E5').toFrequency();
+            this.apCharge.frequency.rampTo(endFreq, 2.5); // Ramp over 2.5 seconds (time to max AP)
+        }
+    }
+    
+    /**
+     * Stop AP charge sound (when charging stops)
+     */
+    stopAPCharge() {
+        if (!this.isChargingAP) return;
+        this.isChargingAP = false;
+        if (this.apCharge) {
+            // Quick release
+            this.apCharge.triggerRelease();
+        }
+    }
+    
+    /**
      * Set volume for all SFX
      */
     setVolume(volume) {
@@ -215,12 +255,16 @@ export class BattleSceneSFX {
         if (this.projectile) this.projectile.volume.value = volume;
         if (this.block) this.block.volume.value = volume;
         if (this.critical) this.critical.volume.value = volume + 2;
+        if (this.apCharge) this.apCharge.volume.value = volume - 3;
     }
     
     /**
      * Dispose of all synths
      */
     dispose() {
+        // Stop continuous sounds
+        this.stopAPCharge();
+        
         if (this.attack) this.attack.dispose();
         if (this.hit) this.hit.dispose();
         if (this.dash) this.dash.dispose();
@@ -230,6 +274,7 @@ export class BattleSceneSFX {
         if (this.projectile) this.projectile.dispose();
         if (this.block) this.block.dispose();
         if (this.critical) this.critical.dispose();
+        if (this.apCharge) this.apCharge.dispose();
         
         this.attack = null;
         this.hit = null;
@@ -240,6 +285,7 @@ export class BattleSceneSFX {
         this.projectile = null;
         this.block = null;
         this.critical = null;
+        this.apCharge = null;
         this.initialized = false;
         
         console.log('[BattleSceneSFX] Disposed');

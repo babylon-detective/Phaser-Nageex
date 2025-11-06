@@ -1526,7 +1526,12 @@ export default class WorldScene extends Phaser.Scene {
             this.worldSceneSong.stop();
             console.log('[WorldScene] Music stopped (scene paused)');
         }
-        // Note: SFX don't need to be stopped on pause, they're event-driven
+        // Stop walking sound when leaving scene (prevents it from continuing in BattleScene)
+        if (this.worldSceneSFX) {
+            this.worldSceneSFX.stopWalking();
+            this.worldSceneSFX.stopSprintCharge();
+            console.log('[WorldScene] Walking and sprint charge sounds stopped (scene paused)');
+        }
     }
 
     sleep() {

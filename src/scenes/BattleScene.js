@@ -2031,11 +2031,19 @@ export default class BattleScene extends Phaser.Scene {
                 console.log('[BattleScene] =/L3 held - starting AP charge');
                 this.isChargingAP = true;
                 this.showChargingFeedback();
+                // Play AP charge sound
+                if (this.battleSceneSFX) {
+                    this.battleSceneSFX.startAPCharge();
+                }
             }
         } else {
             if (this.isChargingAP) {
                 console.log('[BattleScene] =/L3 released - stopping AP charge');
                 this.isChargingAP = false;
+                // Stop AP charge sound
+                if (this.battleSceneSFX) {
+                    this.battleSceneSFX.stopAPCharge();
+                }
             }
         }
         
@@ -4592,6 +4600,11 @@ export default class BattleScene extends Phaser.Scene {
         if (this.isChargingAP && this.currentAP < this.maxAP) {
             const apGain = this.chargeAPRate * delta / 1000;
             this.currentAP = Math.min(this.maxAP, this.currentAP + apGain);
+            
+            // Stop AP charge sound when AP reaches max
+            if (this.currentAP >= this.maxAP && this.battleSceneSFX) {
+                this.battleSceneSFX.stopAPCharge();
+            }
             
             // Only log occasionally to reduce spam
             if (Math.random() < 0.1) { // Log 10% of the time
