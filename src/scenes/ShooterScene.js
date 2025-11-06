@@ -18,15 +18,23 @@ export default class ShooterScene extends Phaser.Scene {
         // State flags
         this.hasExited = false;
         this.hasCompleted = false;
+        this.isPaused = false;
         
         // Time limit
         this.timeLimit = 60000; // 60 seconds
         this.startTime = 0;
         this.timeText = null;
+        this.pausedTime = 0;  // Track paused duration
         
         // Score
         this.score = 0;
         this.scoreText = null;
+        
+        // Gamepad support
+        this.gamepad = null;
+        this.gamepadButtonStates = {};
+        this.lastL2State = false;
+        this.lastStartState = false;
     }
 
     init(data) {
@@ -303,6 +311,88 @@ export default class ShooterScene extends Phaser.Scene {
         
         // ESC to exit early
         this.escapeKey = this.input.keyboard.addKey('ESC');
+        
+        // Initialize gamepad
+        this.updateGamepad();
+    }
+    
+    /**
+     * Gamepad helper methods
+     */
+    updateGamepad() {
+        if (window.getGlobalGamepad) {
+            const pad = window.getGlobalGamepad();
+            if (pad && pad.connected) {
+                this.gamepad = pad;
+            } else if (this.gamepad && !this.gamepad.connected) {
+                this.gamepad = null;
+            }
+        } else {
+            try {
+                const gamepads = navigator.getGamepads();
+                if (gamepads && gamepads.length > 0) {
+                    for (let i = 0; i < gamepads.length; i++) {
+                        const pad = gamepads[i];
+                        if (pad && pad.connected) {
+                            this.gamepad = pad;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+    }
+    
+    getGamepadLeftStick() {
+        if (!this.gamepad || !this.gamepad.axes) return { x: 0, y: 0 };
+        
+        const deadzone = 0.15;
+        let x = this.gamepad.axes[0] || 0;
+        let y = this.gamepad.axes[1] || 0;
+        
+        // Apply deadzone
+        if (Math.abs(x) < deadzone) x = 0;
+        if (Math.abs(y) < deadzone) y = 0;
+        
+        return { x, y };
+    }
+    
+    getGamepadRightStick() {
+        if (!this.gamepad || !this.gamepad.axes) return { x: 0, y: 0 };
+        
+        const deadzone = 0.15;
+        let x = this.gamepad.axes[2] || 0;
+        let y = this.gamepad.axes[3] || 0;
+        
+        // Apply deadzone
+        if (Math.abs(x) < deadzone) x = 0;
+        if (Math.abs(y) < deadzone) y = 0;
+        
+        return { x, y };
+    }
+    
+    isGamepadL2Pressed() {
+        if (!this.gamepad || !this.gamepad.buttons) return false;
+        
+        // L2 is button 6 on most controllers
+        const button = this.gamepad.buttons[6];
+        const isPressed = button && (button.pressed || button.value > 0.5);
+        const justPressed = isPressed && !this.lastL2State;
+        this.lastL2State = isPressed;
+        return justPressed;
+    }
+    
+    isGamepadStartPressed() {
+        if (!this.gamepad || !this.gamepad.buttons) return false;
+        
+        // Start is button 9 on most controllers
+        const button = this.gamepad.buttons[9];
+        const isPressed = button && (button.pressed || button.value > 0.5);
+        const justPressed = isPressed && !this.lastStartState;
+        this.lastStartState = isPressed;
+        return justPressed;
     }
     
     drawPlayer(graphics) {
@@ -415,7 +505,7 @@ export default class ShooterScene extends Phaser.Scene {
         this.instructionText = this.add.text(
             20,
             20,
-            'WASD: Move | Mouse: Aim | ESC: Exit',
+            'WASD/Left Stick: Move | Mouse/Right Stick: Aim\nESC/L2: Exit | START: Pause',
             {
                 fontSize: '16px',
                 fontFamily: 'Arial',
@@ -444,10 +534,24 @@ export default class ShooterScene extends Phaser.Scene {
     update(time, delta) {
         if (!this.player || this.hasExited || this.hasCompleted) return;
         
-        // Handle M7-style player input
+        // Update gamepad state
+        this.updateGamepad();
+        
+        // Check for pause (Start button)
+        if (this.isGamepadStartPressed()) {
+            this.togglePause();
+            return;
+        }
+        
+        // Skip updates if paused
+        if (this.isPaused) {
+            return;
+        }
+        
+        // Handle M7-style player input (keyboard + left stick)
         this.handlePlayerInput();
         
-        // Update parallax cursor
+        // Update parallax cursor (mouse + right stick)
         this.updateCursor();
         
         // Update ground (M7 style with tilting horizon)
@@ -470,8 +574,8 @@ export default class ShooterScene extends Phaser.Scene {
         // Check time limit
         this.checkTimeLimit(time);
         
-        // Check for escape
-        if (Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+        // Check for exit (ESC or L2 trigger)
+        if (Phaser.Input.Keyboard.JustDown(this.escapeKey) || this.isGamepadL2Pressed()) {
             this.exitShooterScene();
         }
     }
@@ -479,13 +583,28 @@ export default class ShooterScene extends Phaser.Scene {
     updateCursor() {
         if (!this.cursor) return;
         
-        // Smooth parallax movement towards target
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        
+        // Check for right stick input (gamepad)
+        const rightStick = this.getGamepadRightStick();
+        if (Math.abs(rightStick.x) > 0 || Math.abs(rightStick.y) > 0) {
+            // Use right stick to directly move cursor (more responsive for aiming)
+            const moveSpeed = 8;  // Cursor movement speed
+            this.cursor.targetX += rightStick.x * moveSpeed;
+            this.cursor.targetY += rightStick.y * moveSpeed;
+            
+            // Keep cursor within screen bounds
+            this.cursor.targetX = Phaser.Math.Clamp(this.cursor.targetX, 0, width);
+            this.cursor.targetY = Phaser.Math.Clamp(this.cursor.targetY, 0, height);
+        }
+        
+        // Smooth parallax movement towards target (mouse or gamepad controlled)
         this.cursor.x += (this.cursor.targetX - this.cursor.x) * this.cursor.smoothing;
         this.cursor.y += (this.cursor.targetY - this.cursor.y) * this.cursor.smoothing;
         
         // Calculate depth based on vertical position (higher = further)
         // Cursor near horizon = further away (larger), cursor at bottom = closer (smaller)
-        const height = this.cameras.main.height;
         const horizonY = this.groundConfig.horizonY;
         
         // Normalize Y position (0 = horizon, 1 = bottom)
@@ -504,7 +623,10 @@ export default class ShooterScene extends Phaser.Scene {
         let dx = 0;
         let dy = 0;
         
-        // Calculate movement direction for leader (M7 style)
+        // Get left stick input (gamepad)
+        const leftStick = this.getGamepadLeftStick();
+        
+        // Keyboard input (WASD)
         if (this.wasdKeys.W.isDown) {
             dy = -1;
         }
@@ -516,6 +638,12 @@ export default class ShooterScene extends Phaser.Scene {
         }
         if (this.wasdKeys.D.isDown) {
             dx = 1;
+        }
+        
+        // Add gamepad left stick input (overrides keyboard if both are used)
+        if (Math.abs(leftStick.x) > 0 || Math.abs(leftStick.y) > 0) {
+            dx = leftStick.x;
+            dy = leftStick.y;
         }
         
         // Move leader
@@ -568,15 +696,74 @@ export default class ShooterScene extends Phaser.Scene {
         }
     }
     
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        
+        if (this.isPaused) {
+            // Paused - show overlay
+            soundManager.playMenuConfirm();
+            this.pausedStartTime = this.time.now;
+            
+            // Create pause overlay
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            
+            this.pauseOverlay = this.add.rectangle(
+                width / 2,
+                height / 2,
+                width,
+                height,
+                0x000000,
+                0.7
+            ).setDepth(500);
+            
+            this.pauseText = this.add.text(
+                width / 2,
+                height / 2,
+                'PAUSED\n\nPress START to Resume',
+                {
+                    fontSize: '48px',
+                    fontFamily: 'Arial',
+                    color: '#FFFFFF',
+                    stroke: '#000000',
+                    strokeThickness: 6,
+                    align: 'center'
+                }
+            ).setOrigin(0.5).setDepth(501);
+            
+            console.log('[ShooterScene] ⏸️ Paused');
+        } else {
+            // Unpaused - remove overlay and adjust timer
+            soundManager.playMenuConfirm();
+            
+            // Calculate how long we were paused
+            const pauseDuration = this.time.now - this.pausedStartTime;
+            this.pausedTime += pauseDuration;
+            
+            // Clean up pause UI
+            if (this.pauseOverlay) {
+                this.pauseOverlay.destroy();
+                this.pauseOverlay = null;
+            }
+            if (this.pauseText) {
+                this.pauseText.destroy();
+                this.pauseText = null;
+            }
+            
+            console.log('[ShooterScene] ▶️ Resumed');
+        }
+    }
+    
     updateHUD(time) {
-        // Update time
-        const elapsed = time - this.startTime;
+        // Update time (accounting for paused duration)
+        const elapsed = time - this.startTime - this.pausedTime;
         const remaining = Math.max(0, Math.ceil((this.timeLimit - elapsed) / 1000));
         this.timeText.setText(`TIME: ${remaining}`);
     }
     
     checkTimeLimit(time) {
-        const elapsed = time - this.startTime;
+        // Account for paused time
+        const elapsed = time - this.startTime - this.pausedTime;
         
         if (elapsed >= this.timeLimit) {
             this.handleSuccess();
@@ -638,6 +825,7 @@ export default class ShooterScene extends Phaser.Scene {
         // Reset state flags
         this.hasExited = false;
         this.hasCompleted = false;
+        this.isPaused = false;
         
         // Clean up graphics
         if (this.groundGraphics) {
@@ -663,11 +851,27 @@ export default class ShooterScene extends Phaser.Scene {
             this.charText = null;
         }
         
+        // Clean up pause overlay
+        if (this.pauseOverlay) {
+            this.pauseOverlay.destroy();
+            this.pauseOverlay = null;
+        }
+        if (this.pauseText) {
+            this.pauseText.destroy();
+            this.pauseText = null;
+        }
+        
         // Clean up player and cursor references
         this.player = null;
         this.cursor = null;
         this.wasdKeys = null;
         this.escapeKey = null;
+        
+        // Clean up gamepad references
+        this.gamepad = null;
+        this.gamepadButtonStates = {};
+        this.lastL2State = false;
+        this.lastStartState = false;
         
         // Clean up config
         this.groundConfig = null;
