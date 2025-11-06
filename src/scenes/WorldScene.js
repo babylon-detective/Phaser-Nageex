@@ -10,6 +10,7 @@ import HUDManager from "../ui/HUDManager";
 import MapScene from "./MapScene";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { WorldSceneSong } from "../audio/songs/WorldSceneSong.js";
 
 export default class WorldScene extends Phaser.Scene {
     constructor() {
@@ -23,6 +24,10 @@ export default class WorldScene extends Phaser.Scene {
         // Leader rotation cooldown
         this.leaderRotateCooldown = 0;
         this.leaderRotateDelay = 300; // 300ms between rotations
+        
+        // Background music
+        this.worldSceneSong = null;
+        this.soundInitialized = false;
     }
 
     init(data) {
@@ -408,6 +413,31 @@ export default class WorldScene extends Phaser.Scene {
         });
 
         console.log('[WorldScene] Scene event listeners registered');
+        
+        // Initialize background music
+        this.tryInitializeMusic();
+    }
+    
+    /**
+     * Try to initialize and play background music
+     * Handles browser autoplay restrictions
+     */
+    async tryInitializeMusic() {
+        if (this.soundInitialized) return;
+        
+        try {
+            // Initialize sound system first
+            await soundManager.init();
+            
+            // Create and play world scene song
+            this.worldSceneSong = new WorldSceneSong();
+            await this.worldSceneSong.play();
+            
+            this.soundInitialized = true;
+            console.log('[WorldScene] ✅ Music started immediately');
+        } catch (error) {
+            console.log('[WorldScene] ⏸️ Waiting for user interaction to start music');
+        }
     }
     
     /**
@@ -954,6 +984,18 @@ export default class WorldScene extends Phaser.Scene {
     }
 
     update() {
+        // Try to initialize music on user interaction
+        if (!this.soundInitialized) {
+            const hasInteracted = this.input.activePointer.isDown ||
+                                 this.input.activePointer.justMoved ||
+                                 Object.values(this.input.keyboard.keys).some(key => key && key.isDown) ||
+                                 (this.gamepad && this.gamepad.buttons &&
+                                  this.gamepad.buttons.some(btn => btn && btn.pressed));
+            if (hasInteracted) {
+                this.tryInitializeMusic();
+            }
+        }
+        
         // Update gamepad
         this.updateGamepad();
         
@@ -1371,6 +1413,17 @@ export default class WorldScene extends Phaser.Scene {
             this.physics.world.enable(this.playerManager.player);
             this.cameras.main.startFollow(this.playerManager.player);
         }
+        
+        // Resume background music when returning to scene
+        if (this.worldSceneSong && !this.worldSceneSong.isPlaying) {
+            this.worldSceneSong.play();
+            console.log('[WorldScene] Music resumed (scene resumed)');
+        } else if (!this.worldSceneSong && this.soundInitialized) {
+            // Recreate song if it was disposed
+            this.worldSceneSong = new WorldSceneSong();
+            this.worldSceneSong.play();
+            console.log('[WorldScene] Music recreated and started (scene resumed)');
+        }
     }
 
     startDefeatedNpcAnimation(defeatedNpcIds) {
@@ -1408,7 +1461,11 @@ export default class WorldScene extends Phaser.Scene {
 
     pause() {
         console.log('WorldScene paused');
-        // Optional: Pause any ongoing animations or timers
+        // Stop background music when leaving scene
+        if (this.worldSceneSong && this.worldSceneSong.isPlaying) {
+            this.worldSceneSong.stop();
+            console.log('[WorldScene] Music stopped (scene paused)');
+        }
     }
 
     sleep() {
@@ -1436,6 +1493,13 @@ export default class WorldScene extends Phaser.Scene {
         if (this.chargeGaugeFill) {
             this.chargeGaugeFill.destroy();
             this.chargeGaugeFill = null;
+        }
+        
+        // Clean up background music
+        if (this.worldSceneSong) {
+            this.worldSceneSong.dispose();
+            this.worldSceneSong = null;
+            console.log('[WorldScene] Music disposed (scene shutdown)');
         }
         
         // Call parent shutdown
