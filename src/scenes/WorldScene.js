@@ -1009,7 +1009,7 @@ export default class WorldScene extends Phaser.Scene {
     }
 
     update() {
-        // Try to initialize music on user interaction
+        // Try to initialize music on user interaction (defer to avoid blocking)
         if (!this.soundInitialized) {
             const hasInteracted = this.input.activePointer.isDown ||
                                  this.input.activePointer.justMoved ||
@@ -1017,7 +1017,10 @@ export default class WorldScene extends Phaser.Scene {
                                  (this.gamepad && this.gamepad.buttons &&
                                   this.gamepad.buttons.some(btn => btn && btn.pressed));
             if (hasInteracted) {
-                this.tryInitializeMusic();
+                // Defer audio initialization to avoid blocking main thread
+                requestAnimationFrame(() => {
+                    this.tryInitializeMusic();
+                });
             }
         }
         
@@ -1123,8 +1126,13 @@ export default class WorldScene extends Phaser.Scene {
         // Update charge gauge
         this.updateChargeGauge();
         
-        // Update walking sound based on player movement
-        if (this.playerManager && this.playerManager.controls && this.worldSceneSFX) {
+        // Throttle walking sound checks (only check every 5 frames = ~80ms) for better INP
+        if (!this.lastWalkingSoundCheck) this.lastWalkingSoundCheck = 0;
+        const shouldCheckWalking = (this.time.now - this.lastWalkingSoundCheck) >= 80;
+        
+        if (shouldCheckWalking && this.playerManager && this.playerManager.controls && this.worldSceneSFX) {
+            this.lastWalkingSoundCheck = this.time.now;
+            
             const controls = this.playerManager.controls;
             const isMoving = (controls.wasdKeys && (
                 controls.wasdKeys.left.isDown ||
@@ -1136,19 +1144,24 @@ export default class WorldScene extends Phaser.Scene {
                 Math.abs(controls.gamepad.axes[1] || 0) > 0.3
             ));
             
-            // Check if player is moving (not running, not charging)
-            if (isMoving && !controls.isRunning && !controls.isCharging) {
-                this.worldSceneSFX.startWalking();
-            } else {
-                this.worldSceneSFX.stopWalking();
-            }
-            
-            // Update sprint charge sound
-            if (controls.isCharging) {
-                this.worldSceneSFX.startSprintCharge();
-            } else {
-                this.worldSceneSFX.stopSprintCharge();
-            }
+            // Defer audio work to avoid blocking main thread
+            requestAnimationFrame(() => {
+                if (!this.worldSceneSFX) return;
+                
+                // Check if player is moving (not running, not charging)
+                if (isMoving && !controls.isRunning && !controls.isCharging) {
+                    this.worldSceneSFX.startWalking();
+                } else {
+                    this.worldSceneSFX.stopWalking();
+                }
+                
+                // Update sprint charge sound
+                if (controls.isCharging) {
+                    this.worldSceneSFX.startSprintCharge();
+                } else {
+                    this.worldSceneSFX.stopSprintCharge();
+                }
+            });
         }
         
         // Check if player is on save point

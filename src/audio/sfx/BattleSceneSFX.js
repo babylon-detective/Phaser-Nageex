@@ -54,56 +54,77 @@ export class BattleSceneSFX {
     }
     
     /**
-     * Lazy initialization helpers - creates synths only when needed
+     * Lazy initialization helpers - creates synths only when needed (non-blocking)
      */
     _getOrCreateSynth(name, config) {
         if (!this[name]) {
-            this[name] = new Tone.Synth(config).connect(this.masterVolume);
-            this[name].volume.value = 0; // Use master volume instead
+            try {
+                this[name] = new Tone.Synth(config).connect(this.masterVolume);
+                this[name].volume.value = 0; // Use master volume instead
+            } catch (e) {
+                console.warn(`[BattleSceneSFX] Failed to create synth ${name}:`, e);
+                return null;
+            }
         }
         return this[name];
     }
     
     _getOrCreateNoiseSynth(name, config) {
         if (!this[name]) {
-            this[name] = new Tone.NoiseSynth(config).connect(this.masterVolume);
-            this[name].volume.value = 0; // Use master volume instead
+            try {
+                this[name] = new Tone.NoiseSynth(config).connect(this.masterVolume);
+                this[name].volume.value = 0; // Use master volume instead
+            } catch (e) {
+                console.warn(`[BattleSceneSFX] Failed to create noise synth ${name}:`, e);
+                return null;
+            }
         }
         return this[name];
     }
     
     _getOrCreateMembraneSynth(name, config) {
         if (!this[name]) {
-            this[name] = new Tone.MembraneSynth(config).connect(this.masterVolume);
-            this[name].volume.value = 0; // Use master volume instead
+            try {
+                this[name] = new Tone.MembraneSynth(config).connect(this.masterVolume);
+                this[name].volume.value = 0; // Use master volume instead
+            } catch (e) {
+                console.warn(`[BattleSceneSFX] Failed to create membrane synth ${name}:`, e);
+                return null;
+            }
         }
         return this[name];
     }
     
     /**
-     * Play attack sound
+     * Play attack sound (non-blocking)
      */
     playAttack() {
         if (!this.initialized) return;
-        const synth = this._getOrCreateMembraneSynth('attack', {
-            pitchDecay: 0.05,
-            octaves: 4,
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+        // Defer to avoid blocking main thread
+        requestAnimationFrame(() => {
+            const synth = this._getOrCreateMembraneSynth('attack', {
+                pitchDecay: 0.05,
+                octaves: 4,
+                oscillator: { type: 'sine' },
+                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+            });
+            if (synth) synth.triggerAttackRelease('C2', '8n');
         });
-        synth.triggerAttackRelease('C2', '8n');
     }
     
     /**
-     * Play hit sound
+     * Play hit sound (non-blocking)
      */
     playHit() {
         if (!this.initialized) return;
-        const synth = this._getOrCreateNoiseSynth('hit', {
-            noise: { type: 'white' },
-            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+        // Defer to avoid blocking main thread
+        requestAnimationFrame(() => {
+            const synth = this._getOrCreateNoiseSynth('hit', {
+                noise: { type: 'white' },
+                envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+            });
+            if (synth) synth.triggerAttackRelease('8n');
         });
-        synth.triggerAttackRelease('8n');
     }
     
     /**
@@ -211,22 +232,30 @@ export class BattleSceneSFX {
     }
     
     /**
-     * Start AP charge sound (continuous while charging AP)
+     * Start AP charge sound (continuous while charging AP, non-blocking)
      */
     startAPCharge() {
         if (!this.initialized || this.isChargingAP) return;
         this.isChargingAP = true;
-        const synth = this._getOrCreateSynth('apCharge', {
-            oscillator: { type: 'sine' }, // Changed from triangle for performance
-            envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+        
+        // Defer synth creation to avoid blocking main thread
+        requestAnimationFrame(() => {
+            if (!this.isChargingAP) return; // Check again after defer
+            
+            const synth = this._getOrCreateSynth('apCharge', {
+                oscillator: { type: 'sine' }, // Changed from triangle for performance
+                envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+            });
+            if (!synth) return;
+            
+            synth.volume.value = -3; // Quieter for continuous sound
+            // Start at low frequency (E3)
+            synth.triggerAttack('E3');
+            // Gradually increase frequency as AP charges (E3 to E5)
+            const startFreq = Tone.Frequency('E3').toFrequency();
+            const endFreq = Tone.Frequency('E5').toFrequency();
+            synth.frequency.rampTo(endFreq, 2.5); // Ramp over 2.5 seconds (time to max AP)
         });
-        synth.volume.value = -3; // Quieter for continuous sound
-        // Start at low frequency (E3)
-        synth.triggerAttack('E3');
-        // Gradually increase frequency as AP charges (E3 to E5)
-        const startFreq = Tone.Frequency('E3').toFrequency();
-        const endFreq = Tone.Frequency('E5').toFrequency();
-        synth.frequency.rampTo(endFreq, 2.5); // Ramp over 2.5 seconds (time to max AP)
     }
     
     /**

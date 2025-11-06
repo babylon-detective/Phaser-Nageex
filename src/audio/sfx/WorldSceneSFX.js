@@ -56,46 +56,64 @@ export class WorldSceneSFX {
     }
     
     /**
-     * Lazy initialization helper - creates synth only when needed
+     * Lazy initialization helper - creates synth only when needed (non-blocking)
      */
     _getOrCreateSynth(name, config) {
         if (!this[name]) {
-            this[name] = new Tone.Synth(config).connect(this.masterVolume);
-            this[name].volume.value = 0; // Use master volume instead
+            // Defer synth creation to avoid blocking main thread (better INP)
+            try {
+                this[name] = new Tone.Synth(config).connect(this.masterVolume);
+                this[name].volume.value = 0; // Use master volume instead
+            } catch (e) {
+                console.warn(`[WorldSceneSFX] Failed to create synth ${name}:`, e);
+                return null;
+            }
         }
         return this[name];
     }
     
     _getOrCreateNoiseSynth(name, config) {
         if (!this[name]) {
-            this[name] = new Tone.NoiseSynth(config).connect(this.masterVolume);
-            this[name].volume.value = 0; // Use master volume instead
+            // Defer synth creation to avoid blocking main thread (better INP)
+            try {
+                this[name] = new Tone.NoiseSynth(config).connect(this.masterVolume);
+                this[name].volume.value = 0; // Use master volume instead
+            } catch (e) {
+                console.warn(`[WorldSceneSFX] Failed to create noise synth ${name}:`, e);
+                return null;
+            }
         }
         return this[name];
     }
     
     /**
-     * Play map open sound
+     * Play map open sound (non-blocking)
      */
     playMapOpen() {
         if (!this.initialized) return;
-        const synth = this._getOrCreateSynth('mapOpen', {
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
+        // Defer to avoid blocking main thread
+        requestAnimationFrame(() => {
+            const synth = this._getOrCreateSynth('mapOpen', {
+                oscillator: { type: 'sine' },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
+            });
+            if (synth) synth.triggerAttackRelease('C5', '8n');
         });
-        synth.triggerAttackRelease('C5', '8n');
     }
     
     /**
-     * Play menu open sound
+     * Play menu open sound (non-blocking)
      */
     playMenuOpen() {
         if (!this.initialized) return;
-        const synth = this._getOrCreateSynth('menuOpen', {
-            oscillator: { type: 'triangle' },
-            envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
+        // Defer to avoid blocking main thread
+        requestAnimationFrame(() => {
+            const synth = this._getOrCreateSynth('menuOpen', {
+                oscillator: { type: 'triangle' },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
+            });
+            if (synth) synth.triggerAttackRelease('E4', '16n');
         });
-        synth.triggerAttackRelease('E4', '16n');
     }
     
     /**
@@ -159,22 +177,30 @@ export class WorldSceneSFX {
     }
     
     /**
-     * Start walking sound (continuous - optimized with longer interval)
+     * Start walking sound (continuous - optimized with longer interval, non-blocking)
      */
     startWalking() {
         if (!this.initialized || this.isWalking) return;
         this.isWalking = true;
-        const synth = this._getOrCreateNoiseSynth('walking', {
-            noise: { type: 'brown' },
-            envelope: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.1 }
+        
+        // Defer synth creation to avoid blocking main thread
+        requestAnimationFrame(() => {
+            if (!this.isWalking) return; // Check again after defer
+            
+            const synth = this._getOrCreateNoiseSynth('walking', {
+                noise: { type: 'brown' },
+                envelope: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.1 }
+            });
+            if (!synth) return;
+            
+            synth.volume.value = -8; // Quieter for continuous sound
+            // Reduced frequency for better performance (every 0.5s instead of 0.4s)
+            this.walkingInterval = setInterval(() => {
+                if (this.isWalking && synth) {
+                    synth.triggerAttackRelease('16n');
+                }
+            }, 500);
         });
-        synth.volume.value = -8; // Quieter for continuous sound
-        // Reduced frequency for better performance (every 0.4s instead of 0.3s)
-        this.walkingInterval = setInterval(() => {
-            if (this.isWalking && synth) {
-                synth.triggerAttackRelease('16n');
-            }
-        }, 400);
     }
     
     /**
@@ -190,22 +216,30 @@ export class WorldSceneSFX {
     }
     
     /**
-     * Start sprint charge sound (continuous while holding Shift)
+     * Start sprint charge sound (continuous while holding Shift, non-blocking)
      */
     startSprintCharge() {
         if (!this.initialized || this.isCharging) return;
         this.isCharging = true;
-        const synth = this._getOrCreateSynth('sprintCharge', {
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+        
+        // Defer synth creation to avoid blocking main thread
+        requestAnimationFrame(() => {
+            if (!this.isCharging) return; // Check again after defer
+            
+            const synth = this._getOrCreateSynth('sprintCharge', {
+                oscillator: { type: 'sine' },
+                envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.2 }
+            });
+            if (!synth) return;
+            
+            synth.volume.value = -5;
+            // Start at low frequency (C3 = ~130.81 Hz)
+            synth.triggerAttack('C3');
+            // Gradually increase frequency as charge builds (C3 to C5 = ~523.25 Hz)
+            const startFreq = Tone.Frequency('C3').toFrequency();
+            const endFreq = Tone.Frequency('C5').toFrequency();
+            synth.frequency.rampTo(endFreq, 1); // Ramp over 1 second
         });
-        synth.volume.value = -5;
-        // Start at low frequency (C3 = ~130.81 Hz)
-        synth.triggerAttack('C3');
-        // Gradually increase frequency as charge builds (C3 to C5 = ~523.25 Hz)
-        const startFreq = Tone.Frequency('C3').toFrequency();
-        const endFreq = Tone.Frequency('C5').toFrequency();
-        synth.frequency.rampTo(endFreq, 1); // Ramp over 1 second
     }
     
     /**
