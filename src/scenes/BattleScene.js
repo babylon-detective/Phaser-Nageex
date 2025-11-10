@@ -10,6 +10,8 @@ import { itemsManager } from "../managers/ItemsManager.js";
 import { soundManager } from "../managers/SoundManager.js";
 import { BattleSceneSFX } from "../audio/sfx/BattleSceneSFX.js";
 import { BattleSceneSong } from "../audio/songs/BattleSceneSong.js";
+import { BattleAI } from "../ai/BattleAI.js";
+import { npcAI } from "../ai/NpcAI.js";
 
 export default class BattleScene extends Phaser.Scene {
     constructor() {
@@ -91,9 +93,12 @@ export default class BattleScene extends Phaser.Scene {
         
         // NPC AI Active Movement (all enemy types)
         this.npcMovementSpeed = 150; // Base NPC movement speed
-        this.npcMovementData = new Map(); // Track each NPC's movement state
+        this.npcMovementData = new Map(); // Track each NPC's movement state (legacy - will be replaced by BattleAI)
         this.npcAttackRange = 180; // Range at which NPCs can melee attack
         this.npcAttackCooldown = 1500; // ms between NPC attacks
+        
+        // Battle AI Module
+        this.battleAI = null; // Will be initialized in setupBattle
         
         // Player Health System (now tracked in DOM HUD only)
         this.maxHP = 100;
@@ -360,6 +365,10 @@ export default class BattleScene extends Phaser.Scene {
 
         // Initialize input keys
         this.initializeInput();
+        
+        // Initialize Battle AI Module
+        this.battleAI = new BattleAI(this);
+        console.log('[BattleScene] BattleAI initialized');
 
         // Create enemies using npcDataArray
         const totalEnemies = this.npcDataArray.length;
@@ -416,45 +425,23 @@ export default class BattleScene extends Phaser.Scene {
             // Add to enemies array
             this.enemies.push(enemy);
             
-            // Initialize NPC movement AI for ALL enemy types
-            // Different behaviors based on NPC type
+            // Initialize enemy with BattleAI using profile from NpcAI
+            const profile = npcAI.getAIProfile(npcData.type);
+            this.battleAI.initEnemy(enemy, profile);
+            
+            // Legacy: Keep npcMovementData for backward compatibility (will be removed)
             let aiConfig = {
-                direction: 1, // Start moving right (toward player typically)
+                direction: 1,
                 changeTimer: 0,
-                changeInterval: Math.random() * 2000 + 1000, // Change direction every 1-3 seconds
+                changeInterval: Math.random() * 2000 + 1000,
                 isMoving: false,
                 lastAttackTime: 0,
-                hasBeenAttacked: false
+                hasBeenAttacked: false,
+                aiState: 'idle',
+                aggressiveness: profile.attackFrequency
             };
-            
-            // Configure AI state based on NPC type
-            switch (npcData.type) {
-                case 'GUARD':
-                    aiConfig.aiState = 'idle'; // Guards: idle -> combat -> defensive
-                    aiConfig.aggressiveness = 1.0; // Full aggression
-                    break;
-                case 'MERCHANT':
-                    aiConfig.aiState = 'defensive'; // Merchants stay defensive
-                    aiConfig.aggressiveness = 0.3; // Less aggressive
-                    break;
-                case 'VILLAGER':
-                    aiConfig.aiState = 'idle'; // Villagers start idle
-                    aiConfig.aggressiveness = 0.5; // Moderate
-                    break;
-                default:
-                    // Recruitable NPCs and others
-                    if (npcData.isRecruitableCharacter) {
-                        aiConfig.aiState = 'defensive'; // Recruitable chars are defensive
-                        aiConfig.aggressiveness = 0.6; // Moderate-defensive
-                    } else {
-                        aiConfig.aiState = 'idle';
-                        aiConfig.aggressiveness = 0.8;
-                    }
-                    break;
-            }
-            
             this.npcMovementData.set(enemy, aiConfig);
-            console.log(`[BattleScene] Initialized AI for ${npcData.type}:`, aiConfig);
+            console.log(`[BattleScene] Initialized AI for ${npcData.type} with BattleAI:`, profile);
 
             // NPC stats are now only shown in DOM (HUD), not in Phaser layer
         });
@@ -1436,7 +1423,12 @@ export default class BattleScene extends Phaser.Scene {
                     this.rangeIndicators.splice(enemyIndex, 1);
                 }
                 
-                // Remove from NPC movement data
+                // Remove from BattleAI
+                if (this.battleAI) {
+                    this.battleAI.removeEnemy(recruitedEnemy);
+                }
+                
+                // Legacy: Remove from NPC movement data
                 if (this.npcMovementData.has(recruitedEnemy)) {
                     this.npcMovementData.delete(recruitedEnemy);
                 }
@@ -2234,8 +2226,12 @@ export default class BattleScene extends Phaser.Scene {
         // Update party character indicators to follow their characters
         this.updatePartyIndicators();
         
-        // Update NPC AI - ALL NPCs only move during player AP consumption or charging
-        this.updateNPCMovement(delta);
+        // Update NPC AI using BattleAI module
+        // FUNDAMENTAL: When player acts (consumes AP) or charges AP, NPCs freely act
+        const isPlayerActing = this.isMoving || this.isDashing || this.isDashingAP;
+        if (this.battleAI) {
+            this.battleAI.update(this.enemies, this.player, delta, this.isChargingAP, isPlayerActing);
+        }
     }
     
     updatePartyIndicators() {
@@ -2261,389 +2257,30 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     
-    findClosestPartyMember(npc) {
-        // Create array of all targetable party members (player + active party characters)
-        const allTargets = [this.player];
-        
-        if (this.partyCharacters && this.partyCharacters.length > 0) {
-            this.partyCharacters.forEach(character => {
-                if (character && character.active && !character.memberData?.isDowned) {
-                    allTargets.push(character);
-                }
-            });
-        }
-        
-        // Find closest target
-        let closestTarget = null;
-        let closestDistance = Infinity;
-        
-        allTargets.forEach(target => {
-            if (!target || !target.active) return;
-            
-            // Skip downed player
-            if (target === this.player && this.isPlayerDowned) return;
-            
-            const distance = Phaser.Math.Distance.Between(
-                npc.x,
-                npc.y,
-                target.x,
-                target.y
-            );
-            
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestTarget = target;
-            }
-        });
-        
-        return { target: closestTarget, distance: closestDistance };
-    }
+    // NOTE: All AI functions have been moved to BattleAI.js
+    // The following functions are now handled by BattleAI module:
+    // - findClosestPartyMember
+    // - updateNPCMovement (replaced by BattleAI.update())
+    // - canNPCDoRangedAttack
+    // - getNPCAttackRange
+    // - updateNPCIdleState
+    // - updateNPCCombatState
+    // - updateNPCDefensiveState
+    // - performNPCMeleeAttack
+    // - performNPCRangedAttack
     
-    updateNPCMovement(delta) {
-        // Don't move NPCs during dialogue, enemy selection, or victory
-        if (this.isDialogueActive || this.isEnemySelectionMode || !this.isPlayerTurn || this.isVictorySequence) {
-            this.npcMovementData.forEach((movementData, npc) => {
-                if (npc && npc.active && npc.body) {
-                    npc.body.setVelocityX(0);
-                    movementData.isMoving = false;
-                }
-            });
-            return;
-        }
-        
-        // NPCs should ONLY move and attack when player is consuming or charging AP:
-        // 1. Player is moving (consuming AP)
-        // 2. Player is dashing (consuming AP)
-        // 3. Player is charging AP (vulnerable moment)
-        const shouldNPCsMove = this.isMoving || this.isDashing || this.isDashingAP || this.isChargingAP;
-        const isPlayerCharging = this.isChargingAP; // Track if player is specifically charging
-        
-        if (!shouldNPCsMove) {
-            // FREEZE all NPCs when player is not consuming/charging AP
-            this.npcMovementData.forEach((movementData, npc) => {
-                if (npc && npc.active && npc.body) {
-                    npc.body.setVelocityX(0);
-                    movementData.isMoving = false;
-                }
-            });
-            return;
-        }
-        
-        // Update each NPC's AI and movement
-        this.npcMovementData.forEach((movementData, npc) => {
-            if (!npc || !npc.active || !npc.body || npc.enemyData.health <= 0) {
-                return;
-            }
-            
-            // Find closest party member (player or party character) to target
-            const { target: closestTarget, distance: distanceToTarget } = this.findClosestPartyMember(npc);
-            
-            if (!closestTarget) {
-                // No valid targets - stop moving
-                npc.body.setVelocityX(0);
-                movementData.isMoving = false;
-                return;
-            }
-            
-            // Store current target for attack logic
-            movementData.currentTarget = closestTarget;
-            const distanceToPlayer = distanceToTarget; // Use distance to closest target
-            
-            // Determine AI state based on HP and combat status
-            const hpPercent = npc.enemyData.health / npc.enemyData.maxHealth;
-            
-            // Update AI state based on HP (all NPCs can go defensive)
-            if (hpPercent <= 0.5 && movementData.aiState !== 'defensive') {
-                movementData.aiState = 'defensive';
-                console.log(`[NPC AI] ${npc.enemyData.type} entering DEFENSIVE mode (HP: ${Math.floor(hpPercent * 100)}%)`);
-            } else if (movementData.hasBeenAttacked && movementData.aiState === 'idle') {
-                movementData.aiState = 'combat';
-                console.log(`[NPC AI] ${npc.enemyData.type} entering COMBAT mode!`);
-            }
-            
-            // Handle different AI states
-            switch (movementData.aiState) {
-                case 'idle':
-                    this.updateNPCIdleState(npc, movementData, delta, distanceToPlayer, isPlayerCharging);
-                    break;
-                    
-                case 'combat':
-                    this.updateNPCCombatState(npc, movementData, delta, distanceToPlayer, isPlayerCharging);
-                    break;
-                    
-                case 'defensive':
-                    this.updateNPCDefensiveState(npc, movementData, delta, distanceToPlayer, isPlayerCharging);
-                    break;
-            }
-            
-            // Keep NPCs within bounds
-            const minX = 50;
-            const maxX = this.cameras.main.width - 50;
-            
-            if (npc.x <= minX || npc.x >= maxX) {
-                npc.body.setVelocityX(0);
-            }
-        });
-    }
+    // NOTE: All AI functions have been moved to BattleAI.js
+    // The following legacy functions are kept for reference but are no longer used:
+    // - updateNPCMovement (replaced by BattleAI.update())
+    // - canNPCDoRangedAttack (now in BattleAI.js)
+    // - getNPCAttackRange (now in BattleAI.js)
+    // - updateNPCIdleState (now in BattleAI.js)
+    // - updateNPCCombatState (now in BattleAI.js)
+    // - updateNPCDefensiveState (now in BattleAI.js)
+    // - performNPCMeleeAttack (now in BattleAI.js)
+    // - performNPCRangedAttack (now in BattleAI.js)
     
-    updateNPCIdleState(npc, movementData, delta, distanceToPlayer, isPlayerCharging) {
-        // Idle state: walk forward toward closest target slowly (modified by aggressiveness)
-        movementData.changeTimer += delta;
-        
-        const target = movementData.currentTarget || this.player;
-        
-        // Slowly approach target
-        const directionToPlayer = target.x > npc.x ? 1 : -1;
-        movementData.direction = directionToPlayer;
-        
-        // If player is charging AP, move faster and attack if in range
-        if (isPlayerCharging) {
-            if (distanceToPlayer <= this.npcAttackRange) {
-                // In range - stop and attack vulnerable charging player
-                npc.body.setVelocityX(0);
-                movementData.isMoving = false;
-                
-                const currentTime = this.time.now;
-                if (currentTime - movementData.lastAttackTime >= this.npcAttackCooldown) {
-                    movementData.lastAttackTime = currentTime;
-                    this.performNPCMeleeAttack(npc);
-                }
-            } else {
-                // Chase charging player (speed modified by aggressiveness)
-                const velocity = (this.npcMovementSpeed * movementData.aggressiveness) * movementData.direction;
-                npc.body.setVelocityX(velocity);
-                movementData.isMoving = true;
-            }
-        } else {
-            // Normal slow patrol (speed modified by aggressiveness)
-            const velocity = (this.npcMovementSpeed * 0.7 * movementData.aggressiveness) * movementData.direction;
-            npc.body.setVelocityX(velocity);
-            movementData.isMoving = true;
-        }
-    }
-    
-    updateNPCCombatState(npc, movementData, delta, distanceToPlayer, isPlayerCharging) {
-        // Combat state: actively pursue and attack closest target
-        const target = movementData.currentTarget || this.player;
-        const directionToPlayer = target.x > npc.x ? 1 : -1;
-        
-        // Check if in attack range
-        if (distanceToPlayer <= this.npcAttackRange) {
-            // Stop moving and attack
-            npc.body.setVelocityX(0);
-            movementData.isMoving = false;
-            
-            // Try to attack if cooldown is ready
-            const currentTime = this.time.now;
-            if (currentTime - movementData.lastAttackTime >= this.npcAttackCooldown) {
-                movementData.lastAttackTime = currentTime;
-                this.performNPCMeleeAttack(npc);
-            }
-        } else {
-            // Chase player (speed modified by aggressiveness, faster if player charging)
-            movementData.direction = directionToPlayer;
-            const chargingMultiplier = isPlayerCharging ? 1.2 : 1.0;
-            const velocity = (this.npcMovementSpeed * movementData.aggressiveness * chargingMultiplier) * movementData.direction;
-            npc.body.setVelocityX(velocity);
-            movementData.isMoving = true;
-        }
-    }
-    
-    updateNPCDefensiveState(npc, movementData, delta, distanceToPlayer, isPlayerCharging) {
-        // Defensive state: maintain position with slight mobility
-        movementData.changeTimer += delta;
-        
-        const target = movementData.currentTarget || this.player;
-        
-        // Don't rush forward, just slight repositioning
-        if (distanceToPlayer <= this.npcAttackRange) {
-            // In attack range - stop and attack
-            npc.body.setVelocityX(0);
-            movementData.isMoving = false;
-            
-            const currentTime = this.time.now;
-            if (currentTime - movementData.lastAttackTime >= this.npcAttackCooldown) {
-                movementData.lastAttackTime = currentTime;
-                this.performNPCMeleeAttack(npc);
-            }
-        } else if (distanceToPlayer < this.npcAttackRange * 1.5) {
-            // Close but not in range - slow approach (faster if player charging)
-            const directionToPlayer = target.x > npc.x ? 1 : -1;
-            const chargingMultiplier = isPlayerCharging ? 0.6 : 0.4;
-            const velocity = (this.npcMovementSpeed * movementData.aggressiveness * chargingMultiplier) * directionToPlayer;
-            npc.body.setVelocityX(velocity);
-            movementData.isMoving = true;
-        } else {
-            // Too far - slight back and forth movement
-            if (movementData.changeTimer >= movementData.changeInterval) {
-                movementData.changeTimer = 0;
-                movementData.changeInterval = Math.random() * 1500 + 1000;
-                movementData.direction *= -1;
-            }
-            
-            const velocity = (this.npcMovementSpeed * 0.3 * movementData.aggressiveness) * movementData.direction;
-            npc.body.setVelocityX(velocity);
-            movementData.isMoving = true;
-        }
-    }
-    
-    performNPCMeleeAttack(npc) {
-        console.log(`[NPC AI] ${npc.enemyData.type} performing melee attack!`);
-        
-        // Calculate damage and knockback based on NPC's strength and type
-        const baseDamage = 15;
-        const npcStrength = npc.enemyData.level || 1;
-        const damage = baseDamage + (npcStrength * 2);
-        const knockbackForce = 200 + (npcStrength * 30); // Base knockback + strength modifier
-        
-        // Get the NPC's movement data to find the current target
-        const movementData = this.npcMovementData.get(npc);
-        const target = movementData?.currentTarget || this.player;
-        
-        // Determine attack direction based on target
-        const isNPCRightOfTarget = npc.x > target.x;
-        const attackOffset = isNPCRightOfTarget ? -this.attackOffset : this.attackOffset;
-        const directionToTarget = isNPCRightOfTarget ? -1 : 1;
-        
-        // Create attack hitbox
-        const attackX = npc.x + attackOffset;
-        const attackY = npc.y;
-        
-        const npcAttack = this.add.rectangle(
-            attackX,
-            attackY,
-            this.attackWidth,
-            this.attackHeight,
-            0xff0000 // Red attack
-        );
-        
-        this.physics.add.existing(npcAttack);
-        npcAttack.body.setAllowGravity(false);
-        
-        // Create array of all targetable characters
-        const allTargets = [this.player];
-        if (this.partyCharacters && this.partyCharacters.length > 0) {
-            this.partyCharacters.forEach(character => {
-                if (character && character.active && !character.memberData?.isDowned) {
-                    allTargets.push(character);
-                }
-            });
-        }
-        
-        // Check for collision with ANY party member
-        allTargets.forEach(targetChar => {
-            if (!targetChar || !targetChar.active) return;
-            
-            this.physics.add.overlap(npcAttack, targetChar, () => {
-                const isPlayer = targetChar === this.player;
-                const characterName = isPlayer ? 'Player' : (targetChar.memberData?.name || 'Character');
-                
-                console.log(`[NPC AI] ${npc.enemyData.type} hit ${characterName} for ${damage} damage!`);
-                
-                // Apply HP damage to the target
-                if (isPlayer) {
-                    // Play damage sound
-                    if (this.battleSceneSFX) {
-                        this.battleSceneSFX.playHit();
-                    } else {
-                        soundManager.playHit(); // Fallback
-                    }
-                    
-                    // Damage player
-                    this.currentHP = Math.max(0, this.currentHP - damage);
-                    console.log(`[NPC AI] Player HP: ${this.currentHP}/${this.maxHP}`);
-                    
-                    // Save health to gameStateManager immediately
-                    gameStateManager.updatePlayerHealth(this.currentHP);
-                } else {
-                    // Play damage sound for party member
-                    if (this.battleSceneSFX) {
-                        this.battleSceneSFX.playHit();
-                    } else {
-                        soundManager.playHit(); // Fallback
-                    }
-                    
-                    // Damage party member
-                    if (targetChar.memberData) {
-                        targetChar.memberData.currentHP = Math.max(0, targetChar.memberData.currentHP - damage);
-                        console.log(`[NPC AI] ${characterName} HP: ${targetChar.memberData.currentHP}/${targetChar.memberData.maxHP}`);
-                    }
-                }
-                
-                // Update HUD to reflect HP change
-                if (this.hudManager) {
-                    this.hudManager.updateBattlePartyStats();
-                }
-                
-                // Apply knockback to target
-                const knockbackX = directionToTarget * knockbackForce;
-                const knockbackY = -80; // Upward knockback
-                
-                if (targetChar.body) {
-                    targetChar.body.setVelocity(knockbackX, knockbackY);
-                    
-                    // Reset target velocity after knockback duration
-                    this.time.delayedCall(200, () => {
-                        if (targetChar && targetChar.body) {
-                            targetChar.body.setVelocityX(0);
-                        }
-                    });
-                }
-                
-                // Show damage text on target
-                const damageText = this.add.text(targetChar.x, targetChar.y - 50, `-${damage} HP`, {
-                    fontSize: '28px',
-                    fontFamily: 'Arial',
-                    color: '#ff0000',
-                    stroke: '#000000',
-                    strokeThickness: 4,
-                    fontStyle: 'bold'
-                }).setOrigin(0.5);
-                
-                this.tweens.add({
-                    targets: damageText,
-                    y: targetChar.y - 100,
-                    alpha: 0,
-                    duration: 800,
-                    ease: 'Power2',
-                    onComplete: () => {
-                        damageText.destroy();
-                    }
-                });
-                
-                // Visual feedback on target (flash red with alpha)
-                this.tweens.add({
-                    targets: targetChar,
-                    alpha: 0.3,
-                    fillColor: 0xff0000,
-                    duration: 100,
-                    yoyo: true,
-                    repeat: 2,
-                    onComplete: () => {
-                        targetChar.setAlpha(1);
-                    }
-                });
-                
-                // Check if target is defeated
-                if (isPlayer && this.currentHP <= 0) {
-                    console.log('[NPC AI] Player defeated!');
-                    this.handleCharacterDowned(this.player, true);
-                } else if (!isPlayer && targetChar.memberData && targetChar.memberData.currentHP <= 0) {
-                    console.log(`[NPC AI] ${characterName} defeated!`);
-                    this.handleCharacterDowned(targetChar, false);
-                }
-                
-                npcAttack.destroy();
-            });
-        });
-        
-        // Remove attack after duration
-        this.time.delayedCall(this.attackDuration, () => {
-            if (npcAttack && npcAttack.active) {
-                npcAttack.destroy();
-            }
-        });
-    }
+    // All NPC AI is now handled by BattleAI.update() in the update() loop
     
     handleCharacterDowned(character, isPlayer = false) {
         const characterName = isPlayer ? 'Player' : (character.memberData?.name || 'Character');
@@ -3221,7 +2858,12 @@ export default class BattleScene extends Phaser.Scene {
         // Apply damage
         enemy.enemyData.health = Math.max(0, enemy.enemyData.health - damage);
         
-        // Alert NPC AI that it has been attacked (triggers combat mode)
+        // Alert BattleAI that enemy has been attacked (triggers combat mode)
+        if (this.battleAI) {
+            this.battleAI.markEnemyAttacked(enemy);
+        }
+        
+        // Legacy: Also update npcMovementData for backward compatibility
         if (this.npcMovementData.has(enemy)) {
             const npcData = this.npcMovementData.get(enemy);
             if (!npcData.hasBeenAttacked) {
@@ -3635,7 +3277,12 @@ export default class BattleScene extends Phaser.Scene {
         
         enemy.enemyData.health = Math.max(0, enemy.enemyData.health - damage);
         
-        // Alert NPC AI that it has been attacked (triggers combat mode)
+        // Alert BattleAI that enemy has been attacked (triggers combat mode)
+        if (this.battleAI) {
+            this.battleAI.markEnemyAttacked(enemy);
+        }
+        
+        // Legacy: Also update npcMovementData for backward compatibility
         if (this.npcMovementData.has(enemy)) {
             const npcData = this.npcMovementData.get(enemy);
             if (!npcData.hasBeenAttacked) {
@@ -4853,7 +4500,13 @@ export default class BattleScene extends Phaser.Scene {
         }
         this.rangeIndicators = [];
         
-        // Clean up NPC movement data
+        // Clean up BattleAI
+        if (this.battleAI) {
+            this.battleAI.cleanup();
+            this.battleAI = null;
+        }
+        
+        // Legacy: Clean up NPC movement data
         if (this.npcMovementData) {
             this.npcMovementData.clear();
         }
@@ -5485,7 +5138,13 @@ export default class BattleScene extends Phaser.Scene {
             this.rangeIndicators.splice(enemyIndex, 1);
         }
         
-        // Clean up NPC movement data
+        // Clean up BattleAI data
+        if (this.battleAI) {
+            this.battleAI.removeEnemy(enemy);
+            console.log('[BattleScene] Removed BattleAI data for defeated enemy');
+        }
+        
+        // Legacy: Clean up NPC movement data
         if (this.npcMovementData.has(enemy)) {
             this.npcMovementData.delete(enemy);
             console.log('[BattleScene] Removed NPC movement data for defeated enemy');

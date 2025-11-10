@@ -199,7 +199,7 @@ export class WorldSceneSFX {
                 if (this.isWalking && synth) {
                     synth.triggerAttackRelease('16n');
                 }
-            }, 500);
+            }, 50);
         });
     }
     
