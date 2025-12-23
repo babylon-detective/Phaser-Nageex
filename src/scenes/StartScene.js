@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import SaveState from "../SaveState";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class StartScene extends Phaser.Scene {
     constructor() {
@@ -14,6 +16,9 @@ export default class StartScene extends Phaser.Scene {
         this.gamepadButtonStates = {};
         this.lastStickUp = false;
         this.lastStickDown = false;
+        
+        // Mobile support
+        this.mobileControls = null;
         
         // Sound initialization flag
         this.soundInitialized = false;
@@ -61,6 +66,13 @@ export default class StartScene extends Phaser.Scene {
 
         // Highlight initial selection
         this.updateSelection();
+        
+        // Initialize mobile controls
+        if (mobileManager.isMobile) {
+            this.mobileControls = new MobileControls(this);
+            this.setupMobileListeners();
+            console.log('[StartScene] Mobile controls initialized');
+        }
 
         // Call resizeGame after initializing text objects
         this.resizeGame();
@@ -90,12 +102,14 @@ export default class StartScene extends Phaser.Scene {
     async update() {
         // Initialize sound on first user interaction (if not already initialized)
         if (!this.soundInitialized) {
-            // Check for ANY user interaction (keyboard, mouse movement, click, gamepad)
+            // Check for ANY user interaction (keyboard, mouse movement, click, gamepad, mobile)
+            const mobileInteracted = mobileManager.isMobile && this.input.activePointer.isDown;
             const hasInteracted = this.input.activePointer.isDown || 
                                  this.input.activePointer.justMoved ||
                                  Object.values(this.wasdKeys).some(key => key.isDown) ||
                                  (this.gamepad && this.gamepad.buttons && 
-                                  this.gamepad.buttons.some(btn => btn && btn.pressed));
+                                  this.gamepad.buttons.some(btn => btn && btn.pressed)) ||
+                                 mobileInteracted;
             
             if (hasInteracted) {
                 await this.tryInitializeSound();
@@ -105,23 +119,28 @@ export default class StartScene extends Phaser.Scene {
         // Update gamepad
         this.updateGamepad();
         
-        // Handle menu navigation with keyboard or left stick
-        const navUp = Phaser.Input.Keyboard.JustDown(this.wasdKeys.up) || this.isGamepadStickUp();
-        const navDown = Phaser.Input.Keyboard.JustDown(this.wasdKeys.down) || this.isGamepadStickDown();
+        // Get mobile controls state
+        let mobileUp = false;
+        let mobileDown = false;
+        if (this.mobileControls && mobileManager.isMobile) {
+            const mobileState = this.mobileControls.getState();
+            mobileUp = mobileState.dpad.up;
+            mobileDown = mobileState.dpad.down;
+        }
+        
+        // Handle menu navigation with keyboard, left stick, or mobile
+        const navUp = Phaser.Input.Keyboard.JustDown(this.wasdKeys.up) || this.isGamepadStickUp() || mobileUp;
+        const navDown = Phaser.Input.Keyboard.JustDown(this.wasdKeys.down) || this.isGamepadStickDown() || mobileDown;
         
         if (navUp) {
-            this.selectedIndex = (this.selectedIndex - 1 + this.menuItems.length) % this.menuItems.length;
-            this.updateSelection();
-            soundManager.playMenuSelect(); // Sound effect
+            this.moveSelection(-1);
         }
         
         if (navDown) {
-            this.selectedIndex = (this.selectedIndex + 1) % this.menuItems.length;
-            this.updateSelection();
-            soundManager.playMenuSelect(); // Sound effect
+            this.moveSelection(1);
         }
 
-        // Handle selection with Enter key or Start button (button 9)
+        // Handle selection with Enter key or Start button (button 9) - mobile handled via event listener
         if (Phaser.Input.Keyboard.JustDown(this.wasdKeys.enter) || this.isGamepadButtonJustPressed(9)) {
             this.selectMenuItem(this.selectedIndex);
         }
@@ -221,6 +240,55 @@ export default class StartScene extends Phaser.Scene {
         this.titleText.setPosition(width / 2, height / 4);
         this.menuItems[0].setPosition(width / 2, height / 2);
         this.menuItems[1].setPosition(width / 2, height / 2 + 50);
+        
+        // Resize mobile controls if they exist
+        if (this.mobileControls && mobileManager.isMobile) {
+            this.mobileControls.resize(width, height);
+        }
+    }
+    
+    /**
+     * Setup mobile event listeners
+     */
+    setupMobileListeners() {
+        // Listen for mobile button presses
+        window.addEventListener('mobilebutton', (e) => {
+            if (e.detail.button === 'a' && e.detail.pressed) {
+                // A button = confirm selection
+                this.selectMenuItem(this.selectedIndex);
+            }
+        });
+        
+        // Listen for D-pad or drag navigation
+        window.addEventListener('mobiledrag', (e) => {
+            if (e.detail.direction.up) {
+                this.moveSelection(-1);
+            } else if (e.detail.direction.down) {
+                this.moveSelection(1);
+            }
+        });
+    }
+    
+    /**
+     * Move menu selection
+     */
+    moveSelection(delta) {
+        const oldIndex = this.selectedIndex;
+        this.selectedIndex += delta;
+        
+        // Wrap around
+        if (this.selectedIndex < 0) {
+            this.selectedIndex = this.menuItems.length - 1;
+        } else if (this.selectedIndex >= this.menuItems.length) {
+            this.selectedIndex = 0;
+        }
+        
+        // Play sound if selection changed
+        if (oldIndex !== this.selectedIndex) {
+            soundManager.playMenuMove();
+        }
+        
+        this.updateSelection();
     }
 
     startBattle(npcData) {

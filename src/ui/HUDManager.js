@@ -10,7 +10,7 @@ export default class HUDManager {
         this.scene = scene;
         this.container = null;
         this.elements = {};
-        this.isVisible = true;
+        this._isVisible = true; // Private property to track visibility state
         this.lastInputMethod = 'keyboard'; // 'keyboard' or 'gamepad'
         this.inputCheckInterval = null;
     }
@@ -489,7 +489,7 @@ export default class HUDManager {
      * @param {boolean} visible - Whether to show the HUD
      */
     setVisible(visible) {
-        this.isVisible = visible;
+        this._isVisible = visible;
         if (this.container) {
             this.container.style.display = visible ? 'block' : 'none';
         }
@@ -597,6 +597,36 @@ export default class HUDManager {
             clearInterval(this.inputCheckInterval);
             this.inputCheckInterval = null;
         }
+    }
+
+    /**
+     * Hide the HUD
+     */
+    hide() {
+        if (this.container) {
+            this.container.style.display = 'none';
+            this._isVisible = false;
+            console.log('[HUDManager] HUD hidden');
+        }
+    }
+
+    /**
+     * Show the HUD
+     */
+    show() {
+        if (this.container) {
+            this.container.style.display = 'block';
+            this._isVisible = true;
+            console.log('[HUDManager] HUD shown');
+        }
+    }
+
+    /**
+     * Check if HUD is visible
+     * @returns {boolean} True if visible, false if hidden
+     */
+    isVisible() {
+        return this._isVisible;
     }
 
     /**

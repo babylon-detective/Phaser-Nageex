@@ -3,6 +3,8 @@ import { gameStateManager } from "../managers/GameStateManager.js";
 import { dialogueManager } from "../managers/DialogueManager.js";
 import { skillsManager } from "../managers/SkillsManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class BattleMenuScene extends Phaser.Scene {
     constructor() {

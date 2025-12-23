@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 import { ShooterSceneSFX } from "../audio/sfx/ShooterSceneSFX.js";
 
 export default class ShooterScene extends Phaser.Scene {

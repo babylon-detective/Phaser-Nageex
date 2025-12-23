@@ -12,6 +12,8 @@ import { gameStateManager } from "../managers/GameStateManager.js";
 import { soundManager } from "../managers/SoundManager.js";
 import { WorldSceneSong } from "../audio/songs/WorldSceneSong.js";
 import { WorldSceneSFX } from "../audio/sfx/WorldSceneSFX.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class WorldScene extends Phaser.Scene {
     constructor() {
@@ -32,6 +34,9 @@ export default class WorldScene extends Phaser.Scene {
         
         // Sound effects
         this.worldSceneSFX = null;
+        
+        // Mobile support
+        this.mobileControls = null;
     }
 
     init(data) {
@@ -239,6 +244,18 @@ export default class WorldScene extends Phaser.Scene {
         // Initialize HUD with current game state from GameStateManager
         this.hudManager.updatePlayerStats();
         
+        // Hide HUD by default (toggle with H key)
+        this.hudManager.hide();
+        console.log('[WorldScene] HUD initialized (hidden by default)');
+        
+        // Initialize mobile controls
+        if (mobileManager.isMobile) {
+            this.mobileControls = new MobileControls(this);
+            this.mobileControls.show(); // Show controls in WorldScene
+            this.setupMobileListeners();
+            console.log('[WorldScene] Mobile controls initialized');
+        }
+        
         // Update NPC count based on current defeated NPCs
         const defeatedCount = this.defeatedNpcIds ? this.defeatedNpcIds.length : 0;
         const remainingCount = 15 - defeatedCount;
@@ -380,6 +397,12 @@ export default class WorldScene extends Phaser.Scene {
         const returnKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
         returnKey.on('down', () => {
             this.toggleGamePause();
+        });
+        
+        // Add H key for toggling HUD visibility
+        this.hudToggleKey = this.input.keyboard.addKey('H');
+        this.hudToggleKey.on('down', () => {
+            this.toggleHUD();
         });
         
         // Enable pause input after a short delay to prevent accidental pause on scene start
@@ -1011,11 +1034,13 @@ export default class WorldScene extends Phaser.Scene {
     update() {
         // Try to initialize music on user interaction (defer to avoid blocking)
         if (!this.soundInitialized) {
+            const mobileInteracted = mobileManager.isMobile && this.input.activePointer.isDown;
             const hasInteracted = this.input.activePointer.isDown ||
                                  this.input.activePointer.justMoved ||
                                  Object.values(this.input.keyboard.keys).some(key => key && key.isDown) ||
                                  (this.gamepad && this.gamepad.buttons &&
-                                  this.gamepad.buttons.some(btn => btn && btn.pressed));
+                                  this.gamepad.buttons.some(btn => btn && btn.pressed)) ||
+                                 mobileInteracted;
             if (hasInteracted) {
                 // Defer audio initialization to avoid blocking main thread
                 requestAnimationFrame(() => {
@@ -1245,6 +1270,28 @@ export default class WorldScene extends Phaser.Scene {
             
             // Remove pause overlay
             this.removePauseOverlay();
+        }
+    }
+    
+    toggleHUD() {
+        if (!this.hudManager) {
+            console.error('[WorldScene] HUD Manager not initialized');
+            return;
+        }
+        
+        // Check if methods exist (handle caching issues)
+        if (typeof this.hudManager.isVisible !== 'function') {
+            console.error('[WorldScene] HUD Manager methods not available. Please hard refresh (Ctrl+Shift+R or Cmd+Shift+R)');
+            console.error('[WorldScene] hudManager object:', this.hudManager);
+            return;
+        }
+        
+        if (this.hudManager.isVisible()) {
+            console.log('[WorldScene] Hiding HUD panel (H)');
+            this.hudManager.hide();
+        } else {
+            console.log('[WorldScene] Showing HUD panel (H)');
+            this.hudManager.show();
         }
     }
     
@@ -1565,6 +1612,12 @@ export default class WorldScene extends Phaser.Scene {
             this.npcManager = null;
         }
         
+        // Clean up H key listener
+        if (this.hudToggleKey) {
+            this.hudToggleKey.destroy();
+            this.hudToggleKey = null;
+        }
+        
         // Clean up charge gauge graphics
         if (this.chargeGaugeBackground) {
             this.chargeGaugeBackground.destroy();
@@ -1735,6 +1788,93 @@ export default class WorldScene extends Phaser.Scene {
             partyMembers: partyMembers,
             worldPosition: playerPosition // Pass the actual world position
         });
+    }
+    
+    /**
+     * Setup mobile event listeners
+     */
+    setupMobileListeners() {
+        // Listen for ESC corner double-tap to open menu
+        window.addEventListener('mobileesc', () => {
+            console.log('[WorldScene] Mobile ESC detected, opening menu');
+            if (this.worldSceneSFX) {
+                this.worldSceneSFX.playMenuOpen();
+            } else {
+                soundManager.playMenuConfirm();
+            }
+            this.scene.pause();
+            this.scene.launch('MenuScene', {
+                playerPosition: this.playerManager.getPlayerPosition(),
+                isOnSavePoint: this.isOnSavePoint
+            });
+        });
+        
+        // Listen for mobile button presses
+        window.addEventListener('mobilebutton', (e) => {
+            const { button, pressed } = e.detail;
+            
+            if (!pressed) return; // Only handle button press, not release
+            
+            switch (button) {
+                case 'x': // X button - Open map
+                    console.log('[WorldScene] Mobile X button pressed, opening map');
+                    if (this.worldSceneSFX) {
+                        this.worldSceneSFX.playMapOpen();
+                    } else {
+                        soundManager.playMenuConfirm();
+                    }
+                    this.scene.pause();
+                    this.scene.launch('MapScene', {
+                        playerPosition: this.playerManager.getPlayerPosition()
+                    });
+                    break;
+                    
+                case 'y': // Y button - Open menu
+                    console.log('[WorldScene] Mobile Y button pressed, opening menu');
+                    if (this.worldSceneSFX) {
+                        this.worldSceneSFX.playMenuOpen();
+                    } else {
+                        soundManager.playMenuConfirm();
+                    }
+                    this.scene.pause();
+                    this.scene.launch('MenuScene', {
+                        playerPosition: this.playerManager.getPlayerPosition(),
+                        isOnSavePoint: this.isOnSavePoint
+                    });
+                    break;
+                    
+                case 'b': // B button - Rotate leader left
+                    if (partyLeadershipManager.getPartySize() >= 2 && this.leaderRotateCooldown <= 0) {
+                        const currentLeader = partyLeadershipManager.getLeader();
+                        const oldLeaderPos = currentLeader && currentLeader.sprite ? 
+                            { x: currentLeader.sprite.x, y: currentLeader.sprite.y } : null;
+                        
+                        const newLeader = partyLeadershipManager.rotateLeft();
+                        if (newLeader) {
+                            this.switchControlToLeader(newLeader, oldLeaderPos);
+                            this.leaderRotateCooldown = this.leaderRotateDelay;
+                        }
+                    }
+                    break;
+                    
+                case 'a': // A button - Rotate leader right  
+                    if (partyLeadershipManager.getPartySize() >= 2 && this.leaderRotateCooldown <= 0) {
+                        const currentLeader = partyLeadershipManager.getLeader();
+                        const oldLeaderPos = currentLeader && currentLeader.sprite ? 
+                            { x: currentLeader.sprite.x, y: currentLeader.sprite.y } : null;
+                        
+                        const newLeader = partyLeadershipManager.rotateRight();
+                        if (newLeader) {
+                            this.switchControlToLeader(newLeader, oldLeaderPos);
+                            this.leaderRotateCooldown = this.leaderRotateDelay;
+                        }
+                    }
+                    break;
+            }
+        });
+        
+        // Pass mobile input state to player manager controls
+        // This will be integrated in the player control update cycle
     }
 }
 

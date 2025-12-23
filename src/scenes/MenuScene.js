@@ -6,6 +6,8 @@ import { skillsManager } from "../managers/SkillsManager.js";
 import { partyLeadershipManager } from "../managers/PartyLeadershipManager.js";
 import { soundManager } from "../managers/SoundManager.js";
 import { MenuSceneSFX } from "../audio/sfx/MenuSceneSFX.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {

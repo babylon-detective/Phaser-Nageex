@@ -823,6 +823,18 @@ export default class InputManager {
                 console.warn('[InputManager] Error reading gamepad axes:', e);
             }
         }
+        
+        // Check mobile input (if mobile controls are available and no other input)
+        if (window.mobileManager && window.mobileManager.isMobile && 
+            this.scene.mobileControls && (dx === 0 && dy === 0)) {
+            const mobileState = this.scene.mobileControls.getState();
+            if (mobileState.dpad) {
+                if (mobileState.dpad.left) dx = -1;
+                if (mobileState.dpad.right) dx = 1;
+                if (mobileState.dpad.up) dy = -1;
+                if (mobileState.dpad.down) dy = 1;
+            }
+        }
 
         // Normalize diagonal movement for keyboard input
         if (dx !== 0 && dy !== 0 && (!this.gamepadConnected || Math.abs(this.gamepad?.axes[this.gamepadMap.LEFT_STICK_X] || 0) < this.gamepadDeadzone)) {

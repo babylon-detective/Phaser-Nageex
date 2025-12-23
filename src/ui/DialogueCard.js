@@ -709,8 +709,10 @@ class DialogueCard {
                     ${playerData.type} ${playerData.level ? `(Lv ${playerData.level})` : ''} - What will you do?
                 </div>
                 ${choicesHTML}
-                <div style="text-align: center; margin-top: 15px; color: #888; font-size: 12px;">
-                    W/S • ] confirm • ESC cancel
+                <div style="display: flex; justify-content: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255, 215, 0, 0.3);">
+                    <div style="color: #00D9FF; font-size: 14px; font-weight: bold;">
+                        W/S - Navigate | U - Confirm | ESC - Cancel
+                    </div>
                 </div>
             `;
             
@@ -786,19 +788,24 @@ class DialogueCard {
         const progressText = this.dialogueParagraphs.length > 1 ? 
             `(${this.currentParagraphIndex + 1}/${this.dialogueParagraphs.length})` : '';
         
-        // Create continue prompt
-        const continuePrompt = isLastParagraph ? 
-            (this.dialogueType === 'warning' || this.dialogueType === 'ultimatum' ? 
-                'Press U to acknowledge' : 'Press U to continue') : 
-            'Press U to continue';
+        // Create navigation hints based on position in dialogue
+        const isFirstParagraph = this.currentParagraphIndex === 0;
+        const navigationHint = isFirstParagraph ? 
+            'ESC - Cancel' : 
+            'ESC - Back';
+        const continueHint = isLastParagraph ? 
+            'U - Continue' : 
+            'U - Next';
         
         const htmlContent = `
             <div style="font-weight: bold; color: #FFD700; margin-bottom: 10px;">
                 ${this.currentSpeaker.type} ${this.currentSpeaker.level ? `(Level ${this.currentSpeaker.level})` : ''} ${progressText}
             </div>
             <div style="margin-bottom: 15px; line-height: 1.6;">${currentParagraph}</div>
-            <div style="text-align: center; color: #AAA; font-style: italic; font-size: 14px;">
-                ${continuePrompt}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 215, 0, 0.3);">
+                <div style="color: #00D9FF; font-size: 14px; font-weight: bold;">
+                    ${navigationHint} | ${continueHint}
+                </div>
             </div>
         `;
         
@@ -1079,10 +1086,10 @@ class DialogueCard {
                         this.nextParagraph();
                         break;
                     
-                    // Cancel/Close controls
+                    // Go back to previous paragraph
                     case 'Escape':
                         event.preventDefault();
-                        this.hide();
+                        this.previousParagraph();
                         break;
                 }
             }
@@ -1123,13 +1130,19 @@ class DialogueCard {
                 }
             }
             
-            // Check B button (button 1) for cancel/close
+            // Check B button (button 1) for cancel/back
             const bButtonPressed = gamepad.buttons[1] && gamepad.buttons[1].pressed;
             const bButtonJustPressed = bButtonPressed && !this.gamepadButtonStates.bButton;
             this.gamepadButtonStates.bButton = bButtonPressed;
             
             if (bButtonJustPressed) {
-                this.hide();
+                if (showingChoices) {
+                    // Cancel when viewing choices
+                    this.hide();
+                } else {
+                    // Go back to previous paragraph (like ESC key)
+                    this.previousParagraph();
+                }
             }
             
             // Check left stick for choice navigation (only if showing choices)

@@ -26,6 +26,27 @@ export default class DashController {
         this.shiftPressed = false;
         this.shiftPressStartTime = 0;
         this.tapThreshold = 200; // ms - if released before this, it's a tap (dash)
+        
+        // Mobile shift tracking
+        this.mobileShiftActive = false;
+        
+        // Setup mobile shift listener
+        this.setupMobileListeners();
+    }
+    
+    /**
+     * Setup mobile event listeners
+     */
+    setupMobileListeners() {
+        window.addEventListener('mobileshift', (e) => {
+            if (e.detail.active && !this.mobileShiftActive) {
+                this.mobileShiftActive = true;
+                this.onShiftDown();
+            } else if (!e.detail.active && this.mobileShiftActive) {
+                this.mobileShiftActive = false;
+                this.onShiftUp();
+            }
+        });
     }
 
     /**

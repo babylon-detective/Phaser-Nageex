@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class MapScene extends Phaser.Scene {
     constructor() {

@@ -12,6 +12,8 @@ import { BattleSceneSFX } from "../audio/sfx/BattleSceneSFX.js";
 import { BattleSceneSong } from "../audio/songs/BattleSceneSong.js";
 import { BattleAI } from "../ai/BattleAI.js";
 import { npcAI } from "../ai/NpcAI.js";
+import { mobileManager } from "../managers/MobileManager.js";
+import MobileControls from "../managers/MobileControls.js";
 
 export default class BattleScene extends Phaser.Scene {
     constructor() {
@@ -20,46 +22,41 @@ export default class BattleScene extends Phaser.Scene {
         this.enemies = []; // Array to store multiple enemies
         this.ground = null;
         this.escapeKey = null;
-        this.wasdKeys = null;
         this.isReturning = false;
         
-        // Action Point System
-        this.maxAP = 20; // Much smaller AP pool
+        // ===== NEW TARGET-FOCUSED BATTLE SYSTEM =====
+        
+        // Target Selection System
+        this.isTargetSelectionMode = true; // Battle starts in selection mode
+        this.selectedTargetIndex = 0; // Currently highlighted enemy index
+        this.targetArrow = null; // Visual arrow pointing at selected enemy
+        this.isInTargetMode = false; // True when locked onto an enemy for combat
+        this.currentTarget = null; // Currently targeted enemy
+        
+        // Juggle Combat System
+        this.juggleAPCost = 2; // AP cost per juggle attack
+        this.juggleComboCount = 0; // Current juggle combo count
+        this.lastJuggleTime = 0; // Last juggle attack timestamp
+        this.juggleCooldown = 150; // ms between juggle attacks
+        this.canJuggle = true; // Can perform juggle attack
+        
+        // Action Point System (repurposed for juggle attacks)
+        this.maxAP = 20;
         this.currentAP = 20;
         this.apGauge = null;
         this.apGaugeBackground = null;
         this.apGaugeText = null;
         this.isChargingAP = false;
-        this.chargeAPRate = 8; // AP per second while charging (faster recharge)
-        this.movementAPCost = 2; // AP per second while moving (much higher cost)
-        this.dashAPCost = 4; // AP per second while dashing (double movement cost)
-        this.isMoving = false;
-        this.isDashingAP = false;
-        this.enemyTurnTriggeredWhileCharging = false;
+        this.chargeAPRate = 8; // AP per second while charging
+        this.chargeAPKey = null;
         
-        // Melee Attack & Combo System
-        this.rangeIndicatorRadius = 150; // Visual range indicator size
-        this.maxMeleeDistance = 195; // Maximum distance for melee attack (when yellow circle appears = 150 * 1.3)
-        this.meleeAPCost = 3; // AP cost per melee attack
-        this.comboWindow = 800; // Time window for combo in ms
-        this.comboCooldown = 200; // Cooldown between attacks in combo
-        this.comboCount = 0;
-        this.lastComboTime = 0;
-        this.canCombo = true;
-        this.rangeIndicators = []; // Visual range indicators
-        
-        // Character System
+        // Character System (for display only during selection)
         this.partyMembers = []; // Array of all party members (data)
         this.partyCharacters = []; // Array of party character game objects
-        this.activeCharacterIndex = -1; // Currently controlled character (-1 = all, 0 = player, 1+ = party members)
-        this.activeCharacter = null; // Reference to active character object
-        this.characterSwitchCooldown = 0;
-        this.characterSwitchDelay = 300; // ms between switches
-        this.groupMovementMode = true; // true = all move together (key 0), false = individual control (keys 1-4)
         
         // Defeat System
-        this.isPlayerDowned = false; // Track if player is downed
-        this.playerDownedText = null; // Visual "DOWNED" indicator for player
+        this.isPlayerDowned = false;
+        this.playerDownedText = null;
         
         // Sound effects
         this.battleSceneSFX = null;
@@ -68,69 +65,42 @@ export default class BattleScene extends Phaser.Scene {
         this.battleSceneSong = null;
         this.soundInitialized = false;
         
-        // Face Button Controls (U/I/O/P for each character)
-        this.faceButtons = {
-            u: null, // Character 1 ability
-            i: null, // Character 2 ability  
-            o: null, // Character 3 ability
-            p: null  // Character 4 ability
-        };
-        
-        // Character Abilities and AP Costs
-        this.characterAbilities = {
-            basicAttack: { apCost: 8, damage: 20 },
-            specialAttack: { apCost: 12, damage: 35 },
-            spell: { apCost: 10, damage: 30 },
-            item: { apCost: 5, damage: 0 }
-        };
-        
-        // Turn-based System
-        this.isPlayerTurn = true;
-        this.turnPhase = 'action'; // 'action', 'enemy', 'transition'
-        this.enemyActionQueue = [];
-        this.enemyActionDelay = 1000; // ms delay before enemy actions
-        this.enemyTurnTimeout = null; // Timeout to prevent infinite enemy turns
-        
-        // NPC AI Active Movement (all enemy types)
-        this.npcMovementSpeed = 150; // Base NPC movement speed
-        this.npcMovementData = new Map(); // Track each NPC's movement state (legacy - will be replaced by BattleAI)
-        this.npcAttackRange = 180; // Range at which NPCs can melee attack
-        this.npcAttackCooldown = 1500; // ms between NPC attacks
-        
-        // Battle AI Module
-        this.battleAI = null; // Will be initialized in setupBattle
-        
-        // Player Health System (now tracked in DOM HUD only)
+        // Player Health System
         this.maxHP = 100;
         this.currentHP = 100;
         
-        // Attack properties (used by combo system)
-        this.attackDuration = 50;
-        this.attackOffset = 150;
-        this.attackWidth = 200;
-        this.attackHeight = 40;
-        // Dash properties
-        this.dashKey = null;
-        this.isDashing = false;
-        this.dashSpeed = 1200; // Double the original speed (was 600)
-        this.dashDuration = 300; // Double the original duration (was 150)
-        this.dashCooldown = 50;
-        this.canDash = true;
-        this.enemyHealthTexts = []; // Array to store health display texts
-        this.enemyLevelTexts = []; // Array to store level display texts
-        this.textDisplays = []; // Array to store all text displays for cleanup
+        // Display elements
+        this.enemyHealthTexts = [];
+        this.enemyLevelTexts = [];
+        this.textDisplays = [];
         this.victoryText = null;
         this.isVictorySequence = false;
-        this.defeatedEnemyIds = []; // Track defeated enemy IDs during battle
-        this.totalXpEarned = 0; // Track total XP earned this battle
-        this.defeatedEnemiesData = []; // Store defeated enemy data for XP calculation
+        this.defeatedEnemyIds = [];
+        this.totalXpEarned = 0;
+        this.defeatedEnemiesData = [];
+        
         // Dialogue system properties
         this.dialogueCard = null;
-        this.dialogueChoice = null; // 'fight', 'negotiate_money', 'negotiate_item', 'flee'
+        this.dialogueChoice = null;
         this.isDialogueActive = false;
+        this.dialogueInputCooldown = 0; // Cooldown timer to prevent input bleed-through after dialogue
         
         // Visual ground
         this.checkerboardGround = null;
+        
+        // Mobile support
+        this.mobileControls = null;
+        
+        // Gamepad support
+        this.gamepad = null;
+        this.gamepadButtonStates = {};
+        
+        // Escape system (hold ESC for 3 seconds to flee)
+        this.isHoldingEscape = false;
+        this.escapeHoldStartTime = 0;
+        this.escapeHoldDuration = 3000; // 3 seconds to escape
+        this.escapeProgressBar = null;
+        this.escapeProgressBarBackground = null;
     }
 
     init(data) {
@@ -430,38 +400,12 @@ export default class BattleScene extends Phaser.Scene {
             this.battleAI.initEnemy(enemy, profile);
             
             // Legacy: Keep npcMovementData for backward compatibility (will be removed)
-            let aiConfig = {
-                direction: 1,
-                changeTimer: 0,
-                changeInterval: Math.random() * 2000 + 1000,
-                isMoving: false,
-                lastAttackTime: 0,
-                hasBeenAttacked: false,
-                aiState: 'idle',
-                aggressiveness: profile.attackFrequency
-            };
-            this.npcMovementData.set(enemy, aiConfig);
-            console.log(`[BattleScene] Initialized AI for ${npcData.type} with BattleAI:`, profile);
+            console.log(`[BattleScene] Created enemy ${index + 1}: ${npcData.name || npcData.type}`);
 
             // NPC stats are now only shown in DOM (HUD), not in Phaser layer
         });
 
-        // Add collision between player and enemies
-        this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, null, this);
-        
-        // Add collision between party characters and enemies
-        this.partyCharacters.forEach(character => {
-            if (character && character.body) {
-                this.physics.add.collider(character, this.enemies);
-                console.log(`[BattleScene] Added collision between ${character.memberData.name} and enemies`);
-            }
-        });
-
-        // Add collision between enemies and projectiles
-        this.physics.add.collider(this.enemies, this.projectiles, this.handleProjectileEnemyCollision, null, this);
-
-        // Add collision between enemies and attack sprite
-        this.physics.add.collider(this.enemies, this.attackSprite, this.handleAttackEnemyCollision, null, this);
+        // No collisions needed in target-focused system - combat is abstract
 
         // Create charge bar (initially hidden)
         this.createChargeBar();
@@ -499,13 +443,29 @@ export default class BattleScene extends Phaser.Scene {
         // Initialize enemy list in HUD
         this.updateEnemyHUD();
         
-        console.log('[BattleScene] HUD initialization complete');
+        // Hide HUD by default (toggle with H key)
+        this.hudManager.hide();
+        
+        console.log('[BattleScene] HUD initialization complete (hidden by default)');
+        
+        // Initialize mobile controls
+        if (mobileManager.isMobile) {
+            this.mobileControls = new MobileControls(this);
+            this.mobileControls.show(); // Show controls in BattleScene
+            this.setupMobileListeners();
+            console.log('[BattleScene] Mobile controls initialized');
+        }
         
         // Initialize dialogue card system
         this.dialogueCard = new DialogueCard(this);
         
-        // Create range indicators for each enemy
-        this.createRangeIndicators();
+        // Create target highlights for enemy selection
+        this.createTargetHighlights();
+        
+        // Start in target selection mode
+        this.isTargetSelectionMode = true;
+        this.selectedTargetIndex = 0;
+        console.log('[BattleScene] Battle initialized in TARGET SELECTION MODE - use A/D to move arrow, U to confirm selection');
 
         // Set up scene event listeners for HUD management
         this.events.on('shutdown', () => {
@@ -517,22 +477,506 @@ export default class BattleScene extends Phaser.Scene {
         });
     }
     
-    createRangeIndicators() {
-        console.log('[BattleScene] Creating range indicators for enemies');
+    createTargetHighlights() {
+        console.log('[BattleScene] Creating target selection arrow');
         
-        // Clear existing indicators
-        this.rangeIndicators.forEach(indicator => indicator.destroy());
-        this.rangeIndicators = [];
+        // Clear existing arrow if it exists
+        if (this.targetArrow) {
+            this.targetArrow.destroy();
+        }
         
-        // Create a range indicator for each enemy
-        this.enemies.forEach(enemy => {
-            const indicator = this.add.circle(0, 0, this.rangeIndicatorRadius, 0x00ff00, 0);
-            indicator.setStrokeStyle(4, 0x00ff00, 0); // Start invisible, thicker line
-            indicator.setDepth(0); // Behind everything
-            this.rangeIndicators.push(indicator);
+        // Create a downward-pointing arrow using a triangle
+        this.targetArrow = this.add.triangle(
+            0, 0,
+            0, 0,     // top point
+            -20, -40, // bottom left
+            20, -40,  // bottom right
+            0xFFD700  // gold color
+        );
+        this.targetArrow.setStrokeStyle(3, 0xFFAA00);
+        this.targetArrow.setDepth(1000);
+        
+        // Position arrow above first enemy
+        if (this.enemies.length > 0) {
+            this.updateTargetHighlight();
+        }
+        
+        console.log('[BattleScene] Created target selection arrow');
+    }
+    
+    /**
+     * Update target highlight to show currently selected enemy
+     */
+    updateTargetHighlight() {
+        if (!this.targetArrow || !this.enemies[this.selectedTargetIndex]) return;
+        
+        const enemy = this.enemies[this.selectedTargetIndex];
+        
+        // Position arrow above enemy's head
+        this.targetArrow.setPosition(enemy.x, enemy.y - enemy.height / 2 - 50);
+        this.targetArrow.setVisible(true);
+        
+        // Add a pulsing animation for visibility
+        this.tweens.killTweensOf(this.targetArrow);
+        this.tweens.add({
+            targets: this.targetArrow,
+            y: enemy.y - enemy.height / 2 - 60,
+            duration: 500,
+            ease: 'Sine.InOut',
+            yoyo: true,
+            repeat: -1
         });
         
-        console.log(`[BattleScene] Created ${this.rangeIndicators.length} range indicators (radius: ${this.rangeIndicatorRadius})`);
+        console.log(`[BattleScene] Arrow moved to enemy ${this.selectedTargetIndex}: ${enemy.enemyData.name || enemy.enemyData.type}`);
+    }
+    
+    /**
+     * Navigate target selection left
+     */
+    selectPreviousTarget() {
+        if (this.enemies.length === 0) return;
+        
+        this.selectedTargetIndex = (this.selectedTargetIndex - 1 + this.enemies.length) % this.enemies.length;
+        this.updateTargetHighlight();
+        
+        // Play sound (if available)
+        if (this.battleSceneSFX && typeof this.battleSceneSFX.playMenuNavigate === 'function') {
+            this.battleSceneSFX.playMenuNavigate();
+        }
+    }
+    
+    /**
+     * Navigate target selection right
+     */
+    selectNextTarget() {
+        if (this.enemies.length === 0) return;
+        
+        this.selectedTargetIndex = (this.selectedTargetIndex + 1) % this.enemies.length;
+        this.updateTargetHighlight();
+        
+        // Play sound (if available)
+        if (this.battleSceneSFX && typeof this.battleSceneSFX.playMenuNavigate === 'function') {
+            this.battleSceneSFX.playMenuNavigate();
+        }
+    }
+    
+    /**
+     * Confirm target selection and enter target mode
+     */
+    confirmTargetSelection() {
+        if (this.enemies.length === 0 || !this.enemies[this.selectedTargetIndex]) {
+            console.warn('[BattleScene] No valid target to confirm');
+            return;
+        }
+        
+        console.log('[BattleScene] ===== ENTERING TARGET MODE =====');
+        
+        this.currentTarget = this.enemies[this.selectedTargetIndex];
+        this.isTargetSelectionMode = false;
+        this.isInTargetMode = true;
+        this.juggleComboCount = 0;
+        
+        // Play confirmation sound (if available)
+        if (this.battleSceneSFX && typeof this.battleSceneSFX.playMenuSelect === 'function') {
+            this.battleSceneSFX.playMenuSelect();
+        }
+        
+        // Hide arrow during target mode
+        if (this.targetArrow) {
+            this.targetArrow.setVisible(false);
+            this.tweens.killTweensOf(this.targetArrow);
+        }
+        
+        // Position player and target closer together for combat
+        this.enterTargetModePositioning();
+    }
+    
+    /**
+     * Position player and target enemy for juggle combat
+     * Hide other characters
+     */
+    enterTargetModePositioning() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        const groundY = this.cameras.main.height * 0.8;
+        
+        // Move player to left side of screen
+        this.tweens.add({
+            targets: this.player,
+            x: centerX - 200,
+            y: groundY - 150,
+            duration: 500,
+            ease: 'Power2.Out'
+        });
+        
+        // Move player indicator with player
+        this.tweens.add({
+            targets: this.playerIndicator,
+            x: centerX - 200,
+            y: groundY - 150 - 40,
+            duration: 500,
+            ease: 'Power2.Out'
+        });
+        
+        // Move target to right side of screen
+        this.tweens.add({
+            targets: this.currentTarget,
+            x: centerX + 200,
+            y: groundY - 150,
+            duration: 500,
+            ease: 'Power2.Out',
+            onComplete: () => {
+                console.log('[BattleScene] Target mode positioning complete - ready for juggle combat!');
+                // Don't show overlay UI - keep it clean
+            }
+        });
+        
+        // Hide other enemies
+        this.enemies.forEach((enemy, index) => {
+            if (index !== this.selectedTargetIndex) {
+                this.tweens.add({
+                    targets: enemy,
+                    alpha: 0.2,
+                    duration: 300
+                });
+            }
+        });
+        
+        // Hide party characters
+        this.partyCharacters.forEach(character => {
+            this.tweens.add({
+                targets: character.sprite,
+                alpha: 0.2,
+                duration: 300
+            });
+            if (character.indicator) {
+                this.tweens.add({
+                    targets: character.indicator,
+                    alpha: 0.2,
+                    duration: 300
+                });
+            }
+        });
+    }
+    
+    /**
+     * Show target mode UI instructions
+     */
+    showTargetModeInstructions() {
+        const overlay = document.createElement('div');
+        overlay.id = 'target-mode-ui';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 3px solid #00D9FF;
+            border-radius: 10px;
+            padding: 20px 40px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-align: center;
+            z-index: 10000;
+            pointer-events: none;
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.5);
+        `;
+        
+        const targetName = this.currentTarget.enemyData.name || this.currentTarget.enemyData.type;
+        
+        overlay.innerHTML = `
+            <div style="margin-bottom: 15px; color: #00D9FF; font-weight: bold; font-size: 24px;">
+                ⚔️ TARGET MODE
+            </div>
+            <div style="margin-bottom: 15px; font-size: 20px;">
+                Fighting: <span style="color: #FFD700;">${targetName}</span>
+            </div>
+            <div style="margin-bottom: 10px; color: #4A90E2;">
+                AP: ${this.currentAP}/${this.maxAP} | Combo: ${this.juggleComboCount}
+            </div>
+            <div style="font-size: 16px; color: #00FF88; font-weight: bold; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 217, 255, 0.3);">
+                U - Juggle Attack (${this.juggleAPCost} AP) | = - Charge AP | ESC - Exit Combat
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+    }
+    
+    /**
+     * Update target mode UI
+     */
+    updateTargetModeUI() {
+        const overlay = document.getElementById('target-mode-ui');
+        if (!overlay || !this.currentTarget) return;
+        
+        const targetName = this.currentTarget.enemyData.name || this.currentTarget.enemyData.type;
+        const targetHealth = this.currentTarget.enemyData.health;
+        const targetMaxHealth = this.currentTarget.enemyData.maxHealth;
+        
+        overlay.innerHTML = `
+            <div style="margin-bottom: 15px; color: #00D9FF; font-weight: bold; font-size: 24px;">
+                ⚔️ TARGET MODE
+            </div>
+            <div style="margin-bottom: 15px; font-size: 20px;">
+                Fighting: <span style="color: #FFD700;">${targetName}</span>
+            </div>
+            <div style="margin-bottom: 10px; color: #4A90E2;">
+                Target HP: ${targetHealth}/${targetMaxHealth}
+            </div>
+            <div style="margin-bottom: 10px; color: #00FF88;">
+                AP: ${this.currentAP}/${this.maxAP} | Combo: ${this.juggleComboCount}
+            </div>
+            <div style="font-size: 16px; color: #00FF88; font-weight: bold; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 217, 255, 0.3);">
+                U - Juggle Attack (${this.juggleAPCost} AP) | = - Charge AP | ESC - Exit Combat
+            </div>
+        `;
+    }
+    
+    /**
+     * Perform juggle attack
+     */
+    performJuggleAttack() {
+        // Check if can perform attack
+        if (!this.canJuggle || this.currentAP < this.juggleAPCost) {
+            console.warn('[BattleScene] Cannot juggle: not enough AP or on cooldown');
+            this.showNoAPMessage();
+            return;
+        }
+        
+        if (!this.currentTarget || !this.currentTarget.active) {
+            console.warn('[BattleScene] No valid target for juggle attack');
+            return;
+        }
+        
+        // Consume AP
+        this.consumeAP(this.juggleAPCost);
+        
+        // Increment combo
+        this.juggleComboCount++;
+        this.lastJuggleTime = this.time.now;
+        this.canJuggle = false;
+        
+        // Calculate damage (increases with combo)
+        const baseDamage = 10;
+        const comboDamage = baseDamage + (this.juggleComboCount * 2);
+        
+        console.log(`[BattleScene] Juggle attack ${this.juggleComboCount}! Damage: ${comboDamage}`);
+        
+        // Play attack animation (player lunges at target)
+        this.tweens.add({
+            targets: this.player,
+            x: this.currentTarget.x - 80,
+            duration: 100,
+            ease: 'Power2.Out',
+            yoyo: true,
+            onComplete: () => {
+                this.canJuggle = true;
+            }
+        });
+        
+        // Target hit animation
+        this.tweens.add({
+            targets: this.currentTarget,
+            y: this.currentTarget.y - 30,
+            duration: 150,
+            ease: 'Power2.Out',
+            yoyo: true
+        });
+        
+        // Flash target
+        this.tweens.add({
+            targets: this.currentTarget,
+            alpha: 0.3,
+            duration: 50,
+            yoyo: true,
+            repeat: 2
+        });
+        
+        // Apply damage
+        this.applyDamageToEnemy(this.currentTarget, comboDamage);
+        
+        // Check if target still exists (may have been defeated)
+        if (!this.currentTarget || !this.currentTarget.active) {
+            console.log('[BattleScene] Target defeated during attack - skipping combo text');
+            return;
+        }
+        
+        // Show combo text
+        this.showJuggleComboText(this.juggleComboCount, comboDamage);
+        
+        // Update UI
+        this.updateTargetModeUI();
+        
+        // Play attack sound (if available)
+        if (this.battleSceneSFX && typeof this.battleSceneSFX.playAttack === 'function') {
+            this.battleSceneSFX.playAttack();
+        }
+    }
+    
+    /**
+     * Show juggle combo text feedback
+     */
+    showJuggleComboText(comboCount, damage) {
+        const comboText = this.add.text(
+            this.currentTarget.x,
+            this.currentTarget.y - 120,
+            `${comboCount}x COMBO!`,
+            {
+                fontSize: `${24 + comboCount * 4}px`,
+                fontFamily: 'Arial Black, Arial',
+                fontStyle: 'bold',
+                color: '#FFD700',
+                stroke: '#000000',
+                strokeThickness: 4
+            }
+        ).setOrigin(0.5);
+        
+        const damageText = this.add.text(
+            this.currentTarget.x + 60,
+            this.currentTarget.y - 100,
+            `-${damage}`,
+            {
+                fontSize: '32px',
+                fontFamily: 'Arial',
+                fontStyle: 'bold',
+                color: '#FF4444',
+                stroke: '#000000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5);
+        
+        this.textDisplays.push(comboText, damageText);
+        
+        // Animate combo text
+        this.tweens.add({
+            targets: comboText,
+            y: comboText.y - 50,
+            alpha: 0,
+            scale: 1.5,
+            duration: 800,
+            ease: 'Power2.Out',
+            onComplete: () => {
+                comboText.destroy();
+            }
+        });
+        
+        // Animate damage text
+        this.tweens.add({
+            targets: damageText,
+            y: damageText.y - 40,
+            alpha: 0,
+            duration: 600,
+            ease: 'Power2.Out',
+            onComplete: () => {
+                damageText.destroy();
+            }
+        });
+    }
+    
+    /**
+     * Exit target mode and return to selection mode
+     */
+    exitTargetMode() {
+        console.log('[BattleScene] Exiting target mode');
+        
+        this.isInTargetMode = false;
+        this.isTargetSelectionMode = true;
+        this.currentTarget = null;
+        this.juggleComboCount = 0;
+        
+        // Remove target mode UI
+        const overlay = document.getElementById('target-mode-ui');
+        if (overlay) {
+            overlay.remove();
+        }
+        
+        // Reset enemy positions and visibility
+        this.resetBattlePositions();
+    }
+    
+    /**
+     * Reset all character positions back to original battle formation
+     */
+    resetBattlePositions() {
+        const playerX = this.cameras.main.width * 0.3;
+        const groundY = this.cameras.main.height * 0.8;
+        
+        // Move player back to original position (3x faster)
+        this.tweens.add({
+            targets: this.player,
+            x: playerX,
+            y: groundY - 150,
+            alpha: 1,
+            duration: 167,
+            ease: 'Power2.Out'
+        });
+        
+        // Move player indicator
+        this.tweens.add({
+            targets: this.playerIndicator,
+            x: playerX,
+            y: groundY - 150 - 40,
+            alpha: 1,
+            duration: 167,
+            ease: 'Power2.Out'
+        });
+        
+        // Reset enemies to original positions
+        const totalEnemies = this.enemies.length;
+        const spacing = 100;
+        let startX = this.cameras.main.width * 0.7;
+        
+        this.enemies.forEach((enemy, index) => {
+            const enemyX = startX + (index * spacing);
+            
+            this.tweens.add({
+                targets: enemy,
+                x: enemyX,
+                y: groundY - 150,
+                alpha: 1,
+                duration: 167,
+                ease: 'Power2.Out'
+            });
+        });
+        
+        // Show party characters
+        this.partyCharacters.forEach(character => {
+            this.tweens.add({
+                targets: character.sprite,
+                alpha: 1,
+                duration: 167
+            });
+            if (character.indicator) {
+                this.tweens.add({
+                    targets: character.indicator,
+                    alpha: 1,
+                    duration: 167
+                });
+            }
+        });
+        
+        // Re-enable target selection arrow (match faster animation speed)
+        this.time.delayedCall(167, () => {
+            if (this.targetArrow) {
+                this.targetArrow.setVisible(true);
+            }
+            this.updateTargetHighlight();
+            console.log('[BattleScene] Battle positions reset (3x faster)');
+        });
+    }
+    
+    /**
+     * Start dialogue/talk mode (separate from combat)
+     */
+    startTargetDialogueSelection() {
+        if (this.isInTargetMode) {
+            console.log('[BattleScene] Cannot open dialogue while in target mode');
+            return;
+        }
+        
+        console.log('[BattleScene] Starting dialogue target selection');
+        this.startEnemySelection();
     }
     
     createPartyCharacters(groundY) {
@@ -604,7 +1048,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     
     createCheckerboardGround(groundY) {
-        console.log('[BattleScene] Creating Mac System 7 style checkerboard ground');
+        console.log('[BattleScene] Creating Mac System 7 style checkerboard ground with perspective');
         
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
@@ -620,59 +1064,80 @@ export default class BattleScene extends Phaser.Scene {
         
         // Define perspective parameters
         const horizonY = groundY - 150; // Horizon line above the ground
-        const rows = 20; // Number of rows for smooth perspective
-        const tilesPerRow = 20; // More tiles for better coverage
+        const vanishingPointX = width / 2; // Center vanishing point
+        const vanishingPointY = horizonY; // Vanishing point at horizon
+        
+        const rows = 30; // More rows for smoother perspective
         
         // Draw each row from horizon (far) to bottom (near)
         for (let row = 0; row < rows; row++) {
             // Calculate normalized depth (0 = horizon/far, 1 = near/bottom)
             const normalizedDepth = row / (rows - 1);
             
-            // Use exponential curve for more realistic depth perception
+            // Use exponential curve for dramatic perspective
             const depthCurve = Math.pow(normalizedDepth, 1.8);
             
-            // Calculate Y positions with non-linear perspective
-            const currentY = horizonY + (height - horizonY) * depthCurve;
+            // Calculate Y positions
+            const currentY = vanishingPointY + (height - vanishingPointY) * depthCurve;
             const nextDepth = Math.min(1, (row + 1) / (rows - 1));
             const nextDepthCurve = Math.pow(nextDepth, 1.8);
-            const nextY = horizonY + (height - horizonY) * nextDepthCurve;
+            const nextY = vanishingPointY + (height - vanishingPointY) * nextDepthCurve;
             
-            // Each row spans FULL WIDTH from left (0) to right (width) edge
-            // No vanishing point - tiles always go edge to edge
-            const rowLeft = 0;
-            const rowRight = width;
-            const rowWidth = rowRight - rowLeft;
-            const tileWidth = rowWidth / tilesPerRow;
+            // Calculate row width based on perspective
+            // Far rows (horizon) are narrow, near rows (bottom) span MORE than full width
+            const minWidthRatio = 0.15; // Horizon is 15% of screen width
+            const maxWidthRatio = 2.5; // Bottom extends well beyond screen edges
+            const widthRatio = minWidthRatio + (maxWidthRatio - minWidthRatio) * normalizedDepth;
             
-            // Next row also spans full width
-            const nextRowLeft = 0;
-            const nextRowRight = width;
-            const nextRowWidth = nextRowRight - nextRowLeft;
-            const nextTileWidth = nextRowWidth / tilesPerRow;
+            const currentRowWidth = width * widthRatio;
+            const nextWidthRatio = minWidthRatio + (maxWidthRatio - minWidthRatio) * nextDepth;
+            const nextRowWidth = width * nextWidthRatio;
             
-            // Draw each tile in this row
-            for (let col = 0; col < tilesPerRow; col++) {
+            // Center the rows
+            const currentRowLeft = vanishingPointX - currentRowWidth / 2;
+            const nextRowLeft = vanishingPointX - nextRowWidth / 2;
+            
+            // Tile size increases dramatically towards the front
+            // Smaller tiles at horizon, much larger at bottom
+            const baseTileSize = 40; // Base tile size at horizon
+            const frontTileSize = 180; // Much larger tiles at front
+            const tileSize = baseTileSize + (frontTileSize - baseTileSize) * normalizedDepth;
+            
+            // Calculate how many tiles fit in this row
+            const tilesInRow = Math.ceil(currentRowWidth / tileSize);
+            const nextTilesInRow = Math.ceil(nextRowWidth / tileSize);
+            
+            const tileWidth = currentRowWidth / tilesInRow;
+            const nextTileWidth = nextRowWidth / nextTilesInRow;
+            
+            // Draw tiles with extra coverage on sides
+            const startCol = -2; // Start 2 tiles before visible area
+            const endCol = tilesInRow + 2; // End 2 tiles after visible area
+            
+            for (let col = startCol; col < endCol; col++) {
                 // Classic checkerboard pattern
                 const isLight = (row + col) % 2 === 0;
                 const color = isLight ? lightGray : darkGray;
                 
-                // Calculate tile positions - tiles span edge to edge
-                const tileX = rowLeft + col * tileWidth;
-                const nextTileX = nextRowLeft + col * nextTileWidth;
+                // Calculate tile corner positions with perspective
+                const topLeft = currentRowLeft + col * tileWidth;
+                const topRight = topLeft + tileWidth;
+                const bottomLeft = nextRowLeft + col * nextTileWidth;
+                const bottomRight = bottomLeft + nextTileWidth;
                 
-                // Draw rectangle (not trapezoid since no perspective narrowing)
+                // Draw trapezoid tile with perspective
                 checkerboard.fillStyle(color, 1);
                 checkerboard.beginPath();
-                checkerboard.moveTo(tileX, currentY); // Top left
-                checkerboard.lineTo(tileX + tileWidth, currentY); // Top right
-                checkerboard.lineTo(nextTileX + nextTileWidth, nextY); // Bottom right
-                checkerboard.lineTo(nextTileX, nextY); // Bottom left
+                checkerboard.moveTo(topLeft, currentY);
+                checkerboard.lineTo(topRight, currentY);
+                checkerboard.lineTo(bottomRight, nextY);
+                checkerboard.lineTo(bottomLeft, nextY);
                 checkerboard.closePath();
                 checkerboard.fillPath();
                 
                 // Add outline for Mac System 7 look (thinner at distance)
-                const lineThickness = Math.max(0.5, normalizedDepth * 1.5);
-                const lineAlpha = 0.15 + normalizedDepth * 0.15;
+                const lineThickness = Math.max(0.3, normalizedDepth * 2.5);
+                const lineAlpha = 0.15 + normalizedDepth * 0.25;
                 checkerboard.lineStyle(lineThickness, 0x000000, lineAlpha);
                 checkerboard.strokePath();
             }
@@ -686,11 +1151,11 @@ export default class BattleScene extends Phaser.Scene {
         checkerboard.strokePath();
         
         // Add subtle gradient fade to horizon (atmospheric depth)
-        const gradientSteps = 5;
+        const gradientSteps = 10;
         for (let i = 0; i < gradientSteps; i++) {
-            const alpha = (gradientSteps - i) / gradientSteps * 0.1;
-            const offsetY = i * 3;
-            checkerboard.lineStyle(2, 0x000000, alpha);
+            const alpha = (gradientSteps - i) / gradientSteps * 0.12;
+            const offsetY = i * 2.5;
+            checkerboard.lineStyle(1.5, 0x000000, alpha);
             checkerboard.beginPath();
             checkerboard.moveTo(0, horizonY - offsetY);
             checkerboard.lineTo(width, horizonY - offsetY);
@@ -700,107 +1165,90 @@ export default class BattleScene extends Phaser.Scene {
         // Store reference for cleanup
         this.checkerboardGround = checkerboard;
         
-        console.log('[BattleScene] Pseudo-3D checkerboard ground created (edge-to-edge coverage)');
+        console.log('[BattleScene] Perspective checkerboard ground created with vanishing point at', vanishingPointX, vanishingPointY);
     }
 
     initializeInput() {
-        console.log('[BattleScene] Initializing input controls');
+        console.log('[BattleScene] Initializing input controls for target-focused combat');
         
         // Clear any existing input listeners
         this.cleanupInput();
 
         // Initialize keyboard controls
         this.escapeKey = this.input.keyboard.addKey('ESC');
-        this.dashKey = this.input.keyboard.addKey('SHIFT');
-        this.wasdKeys = this.input.keyboard.addKeys({
-            up: 'W',
-            down: 'S',
-            left: 'A',
-            right: 'D'
-        });
+        
+        // Target selection controls (A/D for left/right)
+        this.leftKey = this.input.keyboard.addKey('A');
+        this.rightKey = this.input.keyboard.addKey('D');
+        
+        // Attack/Confirm key (U for juggle attacks and confirm)
+        this.attackKey = this.input.keyboard.addKey('U');
+        
+        // Character rotation keys (Q/E)
+        this.qKey = this.input.keyboard.addKey('Q');
+        this.eKey = this.input.keyboard.addKey('E');
+        
+        // AP charging control
+        this.chargeAPKey = this.input.keyboard.addKey('EQUALS');
+        this.chargeAPKeyAlt = this.input.keyboard.addKey(187); // = key code
+        
+        // Battle menu control (/ key for Talk, Items, Skills)
+        // Note: Using FORWARD_SLASH (191) for better compatibility
+        this.battleMenuKey = this.input.keyboard.addKey(191); // Forward slash key code
+        this.battleMenuKeyAlt = this.input.keyboard.addKey('M'); // Alternative: M for Menu
         
         // Initialize gamepad reference
         this.gamepad = null;
         this.gamepadButtonStates = {};
-        this.lastGamepadCheck = 0;
         
         // Pause state
         this.isPaused = false;
-        
-        // Character switching controls with Q/E rotation
-        this.characterSwitchKeys = this.input.keyboard.addKeys({
-            rotateLeft: 'Q',   // Cycle to previous character
-            rotateRight: 'E',  // Cycle to next character
-            groupMode: 'ZERO'  // Whole team mode
-        });
-        
-        // Face button controls for character abilities
-        this.faceButtons = this.input.keyboard.addKeys({
-            u: 'U',
-            i: 'I', 
-            o: 'O',
-            p: 'P'
-        });
-        
-        // AP charging control
-        this.chargeAPKey = this.input.keyboard.addKey('EQUALS');
-        // Alternative key binding for testing
-        this.chargeAPKeyAlt = this.input.keyboard.addKey(187); // = key code
-
-        // Note: U key (and A gamepad button) used for confirmation/selection in menus
-        // Attacks are now handled by U/I/O/P face buttons only
-
-        // Add / key handler for BattleMenuScene
-        this.slashKey = this.input.keyboard.addKey(191); // Forward slash keyCode
-        this.slashKey.on('down', () => {
-            console.log('[BattleScene] Opening Battle Menu with /');
-            this.openBattleMenu();
-        });
 
         // Add Enter key for pausing
-        const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
-        enterKey.on('down', () => {
-            this.toggleGamePause();
+        this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+        // Note: We check for Enter in update() loop instead of event listener
+        // to avoid issues with pause state
+
+        // Add H key for toggling HUD visibility
+        this.hudToggleKey = this.input.keyboard.addKey('H');
+        this.hudToggleKey.on('down', () => {
+            this.toggleHUD();
         });
 
         // Enable input
         this.input.keyboard.enabled = true;
         this.input.mouse.enabled = true;
+        
+        console.log('[BattleScene] Input initialized: A/D for target selection, U for attack/confirm, ESC to exit');
     }
 
     cleanupInput() {
         console.log('[BattleScene] Cleaning up input controls');
 
         // Remove all keys
-        if (this.slashKey) {
-            this.slashKey.destroy();
-            this.slashKey = null;
-        }
         if (this.escapeKey) {
             this.escapeKey.destroy();
             this.escapeKey = null;
         }
-        if (this.dashKey) {
-            this.dashKey.destroy();
-            this.dashKey = null;
+        if (this.leftKey) {
+            this.leftKey.destroy();
+            this.leftKey = null;
         }
-        if (this.wasdKeys) {
-            Object.values(this.wasdKeys).forEach(key => {
-                if (key) key.destroy();
-            });
-            this.wasdKeys = null;
+        if (this.rightKey) {
+            this.rightKey.destroy();
+            this.rightKey = null;
         }
-        if (this.characterSwitchKeys) {
-            Object.values(this.characterSwitchKeys).forEach(key => {
-                if (key) key.destroy();
-            });
-            this.characterSwitchKeys = null;
+        if (this.attackKey) {
+            this.attackKey.destroy();
+            this.attackKey = null;
         }
-        if (this.faceButtons) {
-            Object.values(this.faceButtons).forEach(key => {
-                if (key) key.destroy();
-            });
-            this.faceButtons = null;
+        if (this.qKey) {
+            this.qKey.destroy();
+            this.qKey = null;
+        }
+        if (this.eKey) {
+            this.eKey.destroy();
+            this.eKey = null;
         }
         if (this.chargeAPKey) {
             this.chargeAPKey.destroy();
@@ -809,6 +1257,22 @@ export default class BattleScene extends Phaser.Scene {
         if (this.chargeAPKeyAlt) {
             this.chargeAPKeyAlt.destroy();
             this.chargeAPKeyAlt = null;
+        }
+        if (this.hudToggleKey) {
+            this.hudToggleKey.destroy();
+            this.hudToggleKey = null;
+        }
+        if (this.enterKey) {
+            this.enterKey.destroy();
+            this.enterKey = null;
+        }
+        if (this.battleMenuKey) {
+            this.battleMenuKey.destroy();
+            this.battleMenuKey = null;
+        }
+        if (this.battleMenuKeyAlt) {
+            this.battleMenuKeyAlt.destroy();
+            this.battleMenuKeyAlt = null;
         }
 
         // Remove all keyboard listeners
@@ -1346,6 +1810,10 @@ export default class BattleScene extends Phaser.Scene {
         this.isDialogueActive = false;
         this.dialogueNpcData = null;
         
+        // Set input cooldown to prevent key bleed-through
+        this.dialogueInputCooldown = 300; // 300ms cooldown
+        console.log('[BattleScene] Set dialogue input cooldown: 300ms');
+        
         console.log('[BattleScene] Dialogue closed, battle resumed');
     }
     
@@ -1355,6 +1823,10 @@ export default class BattleScene extends Phaser.Scene {
         // Reset dialogue state
         this.isDialogueActive = false;
         this.dialogueNpcData = null;
+        
+        // Set input cooldown to prevent key bleed-through
+        this.dialogueInputCooldown = 300; // 300ms cooldown
+        console.log('[BattleScene] Set dialogue input cooldown: 300ms');
         
         console.log('[BattleScene] Dialogue completed, battle resumed');
     }
@@ -1366,6 +1838,10 @@ export default class BattleScene extends Phaser.Scene {
         // Reset dialogue state
         this.isDialogueActive = false;
         this.dialogueNpcData = null;
+        
+        // Set input cooldown to prevent key bleed-through
+        this.dialogueInputCooldown = 300; // 300ms cooldown
+        console.log('[BattleScene] Set dialogue input cooldown after choice: 300ms');
         
         console.log('[BattleScene] Dialogue state reset - isDialogueActive now:', this.isDialogueActive);
         
@@ -1416,9 +1892,9 @@ export default class BattleScene extends Phaser.Scene {
             if (recruitedEnemy) {
                 console.log('[BattleScene] Removing recruited NPC from battle:', npcData.id);
                 
-                // Remove range indicator
+                // Remove range indicator (if it exists)
                 const enemyIndex = this.enemies.indexOf(recruitedEnemy);
-                if (enemyIndex !== -1 && this.rangeIndicators[enemyIndex]) {
+                if (enemyIndex !== -1 && this.rangeIndicators && this.rangeIndicators[enemyIndex]) {
                     this.rangeIndicators[enemyIndex].destroy();
                     this.rangeIndicators.splice(enemyIndex, 1);
                 }
@@ -1426,11 +1902,6 @@ export default class BattleScene extends Phaser.Scene {
                 // Remove from BattleAI
                 if (this.battleAI) {
                     this.battleAI.removeEnemy(recruitedEnemy);
-                }
-                
-                // Legacy: Remove from NPC movement data
-                if (this.npcMovementData.has(recruitedEnemy)) {
-                    this.npcMovementData.delete(recruitedEnemy);
                 }
                 
                 // Fade out animation
@@ -1448,6 +1919,15 @@ export default class BattleScene extends Phaser.Scene {
                 // Remove from enemies array
                 this.enemies = this.enemies.filter(e => e !== recruitedEnemy);
                 console.log('[BattleScene] Remaining enemies:', this.enemies.length);
+                
+                // Check if all enemies are gone - if so, proceed to victory immediately
+                if (this.enemies.length === 0) {
+                    console.log('[BattleScene] All enemies defeated/recruited - skipping to recruitment victory');
+                    this.time.delayedCall(500, () => {
+                        this.showRecruitmentVictorySequence(npcData);
+                    });
+                    return; // Exit early to prevent further processing
+                }
             }
             
             // Show special recruitment victory sequence (not regular victory)
@@ -1988,8 +2468,8 @@ export default class BattleScene extends Phaser.Scene {
         // Update gamepad reference
         this.updateGamepad();
         
-        // Check for pause with Start button (button 9)
-        if (this.isGamepadButtonJustPressed(9)) {
+        // Check for pause with Enter key or Start button (button 9)
+        if ((this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) || this.isGamepadButtonJustPressed(9)) {
             this.toggleGamePause();
             return;
         }
@@ -2001,8 +2481,19 @@ export default class BattleScene extends Phaser.Scene {
         
         // Handle dialogue navigation first (if dialogue is active)
         if (this.isDialogueActive) {
-            // Dialogue is handled by DialogueCard, just return without processing other input
-            return; // Don't process other logic during dialogue
+            // Dialogue is handled by DialogueCard with U for confirm and ESC for back/cancel
+            // No fighting occurs during dialogue - all battle logic is blocked
+            return; // Don't process battle logic during dialogue
+        }
+        
+        // Update dialogue input cooldown
+        if (this.dialogueInputCooldown > 0) {
+            this.dialogueInputCooldown -= delta;
+            if (this.dialogueInputCooldown <= 0) {
+                this.dialogueInputCooldown = 0;
+                console.log('[BattleScene] Dialogue input cooldown expired - inputs ready');
+            }
+            return; // Block input during cooldown period
         }
         
         // Handle enemy selection mode (separate from normal battle update)
@@ -2021,42 +2512,51 @@ export default class BattleScene extends Phaser.Scene {
         // Update AP system
         this.updateAP(delta);
 
-        // Check for escape key (keyboard ESC or gamepad L2 trigger - button 6)
-        if (Phaser.Input.Keyboard.JustDown(this.escapeKey) || this.isGamepadButtonJustPressed(6)) {
-            console.log('[BattleScene] ESC/L2 pressed, returning to world');
-            this.returnToWorld();
-            return;
+        // ESC key - multi-function: deselect target (tap) or hold to flee (3 seconds)
+        if (this.escapeKey) {
+            const isEscPressed = this.escapeKey.isDown || this.isGamepadButtonPressed(6);
+            
+            if (isEscPressed && !this.isHoldingEscape) {
+                // ESC just pressed - check context
+                if (this.isInTargetMode) {
+                    // In target mode: single tap deselects target
+                    console.log('[BattleScene] ESC tapped - deselecting target');
+                    this.exitTargetMode();
+                    return;
+                } else {
+                    // In selection mode: start hold timer to flee
+                    this.isHoldingEscape = true;
+                    this.escapeHoldStartTime = this.time.now;
+                    this.escapeProgressBarBackground.setVisible(true);
+                    this.escapeProgressBar.setVisible(true);
+                    console.log('[BattleScene] ESC hold started - hold for 3 seconds to flee');
+                }
+            } else if (!isEscPressed && this.isHoldingEscape) {
+                // ESC released before 3 seconds
+                this.isHoldingEscape = false;
+                this.escapeProgressBarBackground.setVisible(false);
+                this.escapeProgressBar.setVisible(false);
+                this.escapeProgressBar.width = 0;
+                console.log('[BattleScene] ESC released - escape cancelled');
+            } else if (isEscPressed && this.isHoldingEscape) {
+                // ESC still held - update progress
+                const holdTime = this.time.now - this.escapeHoldStartTime;
+                const progress = Math.min(holdTime / this.escapeHoldDuration, 1);
+                this.escapeProgressBar.width = (300 - 4) * progress; // Max width minus padding
+                
+                if (holdTime >= this.escapeHoldDuration) {
+                    // Held for 3 seconds - flee battle!
+                    console.log('[BattleScene] ESC held for 3 seconds - fleeing battle!');
+                    this.isHoldingEscape = false;
+                    this.escapeProgressBarBackground.setVisible(false);
+                    this.escapeProgressBar.setVisible(false);
+                    this.returnToWorld();
+                    return;
+                }
+            }
         }
 
-        // Check for battle menu (keyboard / or gamepad Select - button 8)
-        if (Phaser.Input.Keyboard.JustDown(this.slashKey) || this.isGamepadButtonJustPressed(8)) {
-            console.log('[BattleScene] //Select pressed, opening Battle Menu');
-            this.openBattleMenu();
-            return;
-        }
-
-        // Handle group movement mode with 0 key or D-pad Up (button 12)
-        if (Phaser.Input.Keyboard.JustDown(this.characterSwitchKeys.groupMode) || 
-            this.isGamepadButtonJustPressed(12)) {
-            console.log('[BattleScene] 0/D-pad Up pressed - activating group movement mode');
-            this.activateGroupMovement();
-        }
-        
-        // Handle character rotation with Q/E keys or D-pad Left/Right (buttons 14/15)
-        const rotateLeft = Phaser.Input.Keyboard.JustDown(this.characterSwitchKeys.rotateLeft) || 
-                          this.isGamepadButtonJustPressed(14);
-        const rotateRight = Phaser.Input.Keyboard.JustDown(this.characterSwitchKeys.rotateRight) || 
-                           this.isGamepadButtonJustPressed(15);
-        
-        if (rotateLeft) {
-            console.log('[BattleScene] Q/D-pad Left pressed - rotating to previous character');
-            this.rotateCharacter('left');
-        }
-        
-        if (rotateRight) {
-            console.log('[BattleScene] E/D-pad Right pressed - rotating to next character');
-            this.rotateCharacter('right');
-        }
+        // Dialogue mode handled by / key in initializeInput
 
         // Handle AP charging (keyboard = or gamepad L3 - button 10 - left stick click)
         const isL3Pressed = this.gamepad && this.gamepad.buttons && this.gamepad.buttons[10] && this.gamepad.buttons[10].pressed;
@@ -2085,153 +2585,84 @@ export default class BattleScene extends Phaser.Scene {
             }
         }
         
-        // Debug: Check if key is working (reduced frequency)
-        if (isChargingKeyPressed && Math.random() < 0.01) { // Only log 1% of the time
-            console.log('[BattleScene] = key is being held down or L3 pressed');
-        }
-
-        // Handle face button abilities (only during player turn and with AP)
-        if (this.isPlayerTurn && this.currentAP > 0) {
-            this.handleFaceButtonInput();
-        }
-
-        // Handle dash (only if has AP) - Shift key or L1 button
-        const dashPressed = Phaser.Input.Keyboard.JustDown(this.dashKey) || this.isGamepadButtonJustPressed(4);
-        if (dashPressed && this.canDash && !this.isDashing && this.currentAP > 0) {
-            console.log('[Update] Dash initiated');
-            this.dash();
-        }
-
-        // Player/Party movement with WASD or Left Stick (only if not dashing, during player turn, and has AP)
-        const moveLeft = this.wasdKeys.left.isDown || this.isGamepadStickLeft();
-        const moveRight = this.wasdKeys.right.isDown || this.isGamepadStickRight();
+        // / or M key or Y button - open battle menu (Talk, Items, Skills)
+        const isSlashPressed = (this.battleMenuKey && Phaser.Input.Keyboard.JustDown(this.battleMenuKey));
+        const isMPressed = (this.battleMenuKeyAlt && Phaser.Input.Keyboard.JustDown(this.battleMenuKeyAlt));
+        const isYButtonPressed = this.isGamepadButtonJustPressed(3);
         
-        if (!this.isDashing && this.isPlayerTurn && this.currentAP > 0) {
-            if (this.groupMovementMode) {
-                // GROUP MOVEMENT MODE (key 0): All characters move together (except downed)
-                if (moveLeft) {
-                    console.log('[BattleScene] Group movement - Left');
-                    // Move player if not downed
-                    if (!this.isPlayerDowned) {
-                this.player.body.setVelocityX(-300);
-                    }
-                    // Move party members if not downed
-                    this.partyCharacters.forEach(char => {
-                        if (char.body && (!char.memberData || !char.memberData.isDowned)) {
-                            char.body.setVelocityX(-300);
-                        }
-                    });
-                this.isMoving = true;
-                } else if (moveRight) {
-                    console.log('[BattleScene] Group movement - Right');
-                    // Move player if not downed
-                    if (!this.isPlayerDowned) {
-                this.player.body.setVelocityX(300);
-                    }
-                    // Move party members if not downed
-                    this.partyCharacters.forEach(char => {
-                        if (char.body && (!char.memberData || !char.memberData.isDowned)) {
-                            char.body.setVelocityX(300);
-                        }
-                    });
-                this.isMoving = true;
-            } else {
-                    // Stop all characters
-                    if (!this.isPlayerDowned) {
-                this.player.body.setVelocityX(0);
-                    }
-                    this.partyCharacters.forEach(char => {
-                        if (char.body && (!char.memberData || !char.memberData.isDowned)) {
-                            char.body.setVelocityX(0);
-                        }
-                    });
-                this.isMoving = false;
+        if (isSlashPressed || isMPressed || isYButtonPressed) {
+            console.log('[BattleScene] Battle menu key pressed (/ or M or Y) - opening battle menu');
+            this.openBattleMenu();
+            return;
+        }
+        
+        // ===== TARGET SELECTION MODE =====
+        // Use A/D to move the arrow between enemies, U to confirm
+        if (this.isTargetSelectionMode) {
+            // A key or Left Stick Left - select previous target
+            if (Phaser.Input.Keyboard.JustDown(this.leftKey) || this.isGamepadStickLeftJustPressed()) {
+                this.selectPreviousTarget();
             }
-        } else {
-                // INDIVIDUAL CHARACTER CONTROL MODE (keys 1-4): Only selected character moves (if not downed)
-                const activeChar = this.getActiveCharacterObject();
-                const isActiveCharDowned = (activeChar === this.player && this.isPlayerDowned) || 
-                                          (activeChar !== this.player && activeChar.memberData?.isDowned);
-                
-                if (activeChar && activeChar.body && !isActiveCharDowned) {
-                    if (moveLeft) {
-                        console.log('[BattleScene] Individual movement - Left (char', this.activeCharacterIndex, ')');
-                        activeChar.body.setVelocityX(-300);
-                        this.isMoving = true;
-                    } else if (moveRight) {
-                        console.log('[BattleScene] Individual movement - Right (char', this.activeCharacterIndex, ')');
-                        activeChar.body.setVelocityX(300);
-                        this.isMoving = true;
-                    } else {
-                        activeChar.body.setVelocityX(0);
-                        this.isMoving = false;
-                    }
-                }
-                
-                // Stop all other characters
-                if (this.activeCharacterIndex !== 0 && this.player.body) {
-                    this.player.body.setVelocityX(0);
-                }
-                this.partyCharacters.forEach((char, index) => {
-                    if (char.body && (index + 1) !== this.activeCharacterIndex) {
-                        char.body.setVelocityX(0);
-                    }
-                });
-            }
-        } else if (!this.isDashing) {
-            // Only stop movement if NOT dashing (dash controls its own velocity)
-            this.player.body.setVelocityX(0);
-            this.partyCharacters.forEach(char => {
-                if (char.body) char.body.setVelocityX(0);
-            });
-            this.isMoving = false;
             
-            // Show feedback when trying to move without AP
-            if (this.isPlayerTurn && this.currentAP <= 0 && (moveLeft || moveRight)) {
-                this.showNoAPFeedback();
+            // D key or Left Stick Right - select next target
+            if (Phaser.Input.Keyboard.JustDown(this.rightKey) || this.isGamepadStickRightJustPressed()) {
+                this.selectNextTarget();
+            }
+            
+            // U key or A button - CONFIRM target selection (enter target mode)
+            // IMPORTANT: Only allow if no dialogue cooldown active
+            if ((Phaser.Input.Keyboard.JustDown(this.attackKey) || this.isGamepadButtonJustPressed(0)) && this.dialogueInputCooldown <= 0) {
+                this.confirmTargetSelection();
             }
         }
-        // If dashing, velocity is controlled by dash function
-
-        // Jump with W or Up on stick - respects movement mode
-        const jumpPressed = this.wasdKeys.up.isDown || this.isGamepadStickUp();
-        if (jumpPressed && this.isPlayerTurn) {
-            if (this.groupMovementMode) {
-                // GROUP MOVEMENT MODE: All characters jump together
-                if (this.player.body.touching.down) {
-                    console.log('[BattleScene] Up key pressed - group jump');
-            this.player.body.setVelocityY(-450);
-                }
-                this.partyCharacters.forEach(char => {
-                    if (char.body && char.body.touching.down) {
-                        char.body.setVelocityY(-450);
-                    }
-                });
-            } else {
-                // INDIVIDUAL CHARACTER CONTROL MODE: Only active character jumps
-                const activeChar = this.getActiveCharacterObject();
-                if (activeChar && activeChar.body && activeChar.body.touching.down) {
-                    console.log('[BattleScene] Up key pressed - individual jump (char', this.activeCharacterIndex, ')');
-                    activeChar.body.setVelocityY(-450);
-                }
-            }
-        }
-
-        // Update enemy health and level displays
-        this.updateEnemyDisplays();
         
-        // Update range indicators
-        this.updateRangeIndicators();
+        // ===== TARGET MODE (JUGGLE COMBAT) =====
+        if (this.isInTargetMode) {
+            // U key or A button - perform juggle attack
+            // IMPORTANT: Only allow if no dialogue cooldown active
+            if ((Phaser.Input.Keyboard.JustDown(this.attackKey) || this.isGamepadButtonJustPressed(0)) && this.dialogueInputCooldown <= 0) {
+                this.performJuggleAttack();
+            }
+            
+            // Q/E keys - rotate character (if AP available and party members exist)
+            if (this.partyCharacters && this.partyCharacters.length > 0) {
+                const rotateAPCost = 1; // Cost 1 AP to rotate character
+                
+                if (Phaser.Input.Keyboard.JustDown(this.qKey)) {
+                    if (this.currentAP >= rotateAPCost) {
+                        this.consumeAP(rotateAPCost);
+                        this.rotateCharacter('left');
+                        console.log('[BattleScene] Q pressed - rotated to previous character');
+                    } else {
+                        this.showNoAPMessage();
+                    }
+                }
+                
+                if (Phaser.Input.Keyboard.JustDown(this.eKey)) {
+                    if (this.currentAP >= rotateAPCost) {
+                        this.consumeAP(rotateAPCost);
+                        this.rotateCharacter('right');
+                        console.log('[BattleScene] E pressed - rotated to next character');
+                    } else {
+                        this.showNoAPMessage();
+                    }
+                }
+            }
+            
+            // Update target mode UI
+            this.updateTargetModeUI();
+        }
+
+        // Update NPC AI - NPCs should act even when player is charging AP
+        if (this.battleAI && this.enemies.length > 0) {
+            this.battleAI.update(this.enemies, this.player, delta, this.isChargingAP, false);
+        }
+        
+        // Update enemy displays
+        this.updateEnemyDisplays();
         
         // Update party character indicators to follow their characters
         this.updatePartyIndicators();
-        
-        // Update NPC AI using BattleAI module
-        // FUNDAMENTAL: When player acts (consumes AP) or charges AP, NPCs freely act
-        const isPlayerActing = this.isMoving || this.isDashing || this.isDashingAP;
-        if (this.battleAI) {
-            this.battleAI.update(this.enemies, this.player, delta, this.isChargingAP, isPlayerActing);
-        }
     }
     
     updatePartyIndicators() {
@@ -2661,6 +3092,32 @@ export default class BattleScene extends Phaser.Scene {
         if (!this.gamepad || !this.gamepad.axes) return false;
         const axisY = this.gamepad.axes[1] || 0;
         return axisY > 0.3;
+    }
+    
+    /**
+     * Check if left stick was just pressed left (for target selection)
+     */
+    isGamepadStickLeftJustPressed() {
+        if (!this.gamepad || !this.gamepad.axes) return false;
+        const axisX = this.gamepad.axes[0] || 0;
+        const isLeft = axisX < -0.3;
+        const wasLeft = this.lastStickLeftState || false;
+        
+        this.lastStickLeftState = isLeft;
+        return isLeft && !wasLeft;
+    }
+    
+    /**
+     * Check if left stick was just pressed right (for target selection)
+     */
+    isGamepadStickRightJustPressed() {
+        if (!this.gamepad || !this.gamepad.axes) return false;
+        const axisX = this.gamepad.axes[0] || 0;
+        const isRight = axisX > 0.3;
+        const wasRight = this.lastStickRightState || false;
+        
+        this.lastStickRightState = isRight;
+        return isRight && !wasRight;
     }
     
     showNoAPFeedback() {
@@ -3280,15 +3737,6 @@ export default class BattleScene extends Phaser.Scene {
         // Alert BattleAI that enemy has been attacked (triggers combat mode)
         if (this.battleAI) {
             this.battleAI.markEnemyAttacked(enemy);
-        }
-        
-        // Legacy: Also update npcMovementData for backward compatibility
-        if (this.npcMovementData.has(enemy)) {
-            const npcData = this.npcMovementData.get(enemy);
-            if (!npcData.hasBeenAttacked) {
-                npcData.hasBeenAttacked = true;
-                console.log(`[NPC AI] ${enemy.enemyData.type} has been attacked by player - entering combat mode!`);
-            }
         }
         
         // Visual feedback
@@ -4093,6 +4541,47 @@ export default class BattleScene extends Phaser.Scene {
         this.apValueText.setDepth(1002);
         
         console.log('[BattleScene] AP gauge created');
+        
+        // Create escape progress bar (above AP gauge, initially hidden)
+        this.createEscapeProgressBar();
+    }
+    
+    createEscapeProgressBar() {
+        console.log('[BattleScene] Creating escape progress bar');
+        
+        const barWidth = 300;
+        const barHeight = 20;
+        const barX = 20;
+        const barY = this.cameras.main.height - 120; // 8px above AP bar (which is at -112)
+        
+        // Background
+        this.escapeProgressBarBackground = this.add.rectangle(
+            barX,
+            barY,
+            barWidth,
+            barHeight,
+            0x000000,
+            0.8
+        );
+        this.escapeProgressBarBackground.setOrigin(0, 0.5);
+        this.escapeProgressBarBackground.setStrokeStyle(2, 0xFF4444);
+        this.escapeProgressBarBackground.setDepth(1001);
+        this.escapeProgressBarBackground.setVisible(false);
+        
+        // Progress fill (starts at 0 width)
+        this.escapeProgressBar = this.add.rectangle(
+            barX,
+            barY,
+            0, // Start at 0 width
+            barHeight - 4,
+            0xFF4444,
+            1
+        );
+        this.escapeProgressBar.setOrigin(0, 0.5);
+        this.escapeProgressBar.setDepth(1002);
+        this.escapeProgressBar.setVisible(false);
+        
+        console.log('[BattleScene] Escape progress bar created');
     }
     
     initializeParty() {
@@ -4237,9 +4726,54 @@ export default class BattleScene extends Phaser.Scene {
                                  this.partyMembersData[this.activeCharacterIndex - 1]?.name || 'Unknown';
             console.log(`[BattleScene] Switched to character ${this.activeCharacterIndex}: ${characterName}`);
             
+            // If in target mode, perform visual swap
+            if (this.isInTargetMode) {
+                this.swapCharacterVisualsInTargetMode(oldIndex, this.activeCharacterIndex);
+            }
+            
             // Visual feedback for character switch
             this.showCharacterSwitchFeedback(characterName);
         }
+    }
+    
+    /**
+     * Swap character visuals in target mode (swap colors/appearance)
+     */
+    swapCharacterVisualsInTargetMode(oldIndex, newIndex) {
+        console.log(`[BattleScene] Swapping visuals from index ${oldIndex} to ${newIndex} in target mode`);
+        
+        // Get character data for new active character
+        let newCharacterData, newColor, newIndicatorColor;
+        
+        if (newIndex === 0) {
+            // Switching to player (leader)
+            newCharacterData = this.playerData;
+            newColor = this.playerData.color || 0x808080;
+            newIndicatorColor = this.playerData.indicatorColor || 0xff0000;
+        } else {
+            // Switching to a party member
+            newCharacterData = this.partyMembersData[newIndex - 1];
+            newColor = newCharacterData.color || 0x808080;
+            newIndicatorColor = newCharacterData.indicatorColor || 0xff0000;
+        }
+        
+        // Update player sprite to show new active character
+        this.player.setFillStyle(newColor);
+        this.playerIndicator.setFillStyle(newIndicatorColor);
+        
+        // Flash effect to show swap
+        this.tweens.add({
+            targets: this.player,
+            alpha: 0.3,
+            duration: 100,
+            yoyo: true,
+            repeat: 2,
+            onComplete: () => {
+                this.player.setAlpha(1);
+            }
+        });
+        
+        console.log(`[BattleScene] Visual swap complete - now displaying ${newCharacterData.name} (color: 0x${newColor.toString(16)})`);
     }
     
     showCharacterSwitchFeedback(characterName) {
@@ -4492,6 +5026,16 @@ export default class BattleScene extends Phaser.Scene {
         if (this.apGaugeText) this.apGaugeText.setVisible(false);
         if (this.apValueText) this.apValueText.setVisible(false);
         
+        // Clean up escape progress bar
+        if (this.escapeProgressBar) {
+            this.escapeProgressBar.destroy();
+            this.escapeProgressBar = null;
+        }
+        if (this.escapeProgressBarBackground) {
+            this.escapeProgressBarBackground.destroy();
+            this.escapeProgressBarBackground = null;
+        }
+        
         // Clean up range indicators
         if (this.rangeIndicators && Array.isArray(this.rangeIndicators)) {
             this.rangeIndicators.forEach(indicator => {
@@ -4535,9 +5079,10 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     toggleGamePause() {
-        this.isPaused = !this.isPaused;
+        // Check actual scene pause state
+        const isCurrentlyPaused = this.scene.isPaused();
         
-        if (this.isPaused) {
+        if (!isCurrentlyPaused) {
             console.log('[BattleScene] ⏸️ GAME PAUSED (Enter/Start)');
             
             // Stop background music when pausing
@@ -4549,22 +5094,28 @@ export default class BattleScene extends Phaser.Scene {
             // Pause the game timer
             gameStateManager.pauseTimer();
             
-            // Pause the scene
-            this.scene.pause();
+            // Set local pause flag
+            this.isPaused = true;
             
             // Create pause overlay
             this.createPauseOverlay();
+            
+            // Pause the scene (must be last so overlay shows)
+            this.scene.pause();
         } else {
             console.log('[BattleScene] ▶️ GAME RESUMED (Enter/Start)');
+            
+            // Resume the scene first
+            this.scene.resume();
+            
+            // Clear local pause flag
+            this.isPaused = false;
             
             // Resume the game timer
             gameStateManager.resumeTimer();
             
             // Remove pause overlay
             this.removePauseOverlay();
-            
-            // Resume the scene
-            this.scene.resume();
             
             // Resume background music when resuming
             if (this.battleSceneSong && !this.battleSceneSong.isPlaying) {
@@ -4576,6 +5127,28 @@ export default class BattleScene extends Phaser.Scene {
                 this.battleSceneSong.play();
                 console.log('[BattleScene] Music recreated and started (scene resumed)');
             }
+        }
+    }
+    
+    toggleHUD() {
+        if (!this.hudManager) {
+            console.error('[BattleScene] HUD Manager not initialized');
+            return;
+        }
+        
+        // Check if methods exist (handle caching issues)
+        if (typeof this.hudManager.isVisible !== 'function') {
+            console.error('[BattleScene] HUD Manager methods not available. Please hard refresh (Ctrl+Shift+R or Cmd+Shift+R)');
+            console.error('[BattleScene] hudManager object:', this.hudManager);
+            return;
+        }
+        
+        if (this.hudManager.isVisible()) {
+            console.log('[BattleScene] Hiding battle controls panel (H)');
+            this.hudManager.hide();
+        } else {
+            console.log('[BattleScene] Showing battle controls panel (H)');
+            this.hudManager.show();
         }
     }
     
@@ -5116,6 +5689,21 @@ export default class BattleScene extends Phaser.Scene {
     handleEnemyDefeat(enemy) {
         console.log('[BattleScene] Handling enemy defeat:', enemy.enemyData.id);
         
+        // Check if this is the currently targeted enemy
+        if (this.isInTargetMode && this.currentTarget === enemy) {
+            console.log('[BattleScene] Targeted enemy defeated - exiting target mode');
+            // Exit target mode before removing enemy
+            this.isInTargetMode = false;
+            this.currentTarget = null;
+            this.juggleComboCount = 0;
+            
+            // Remove target mode UI
+            const overlay = document.getElementById('target-mode-ui');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+        
         // IMPORTANT: Store the defeated enemy ID AND data BEFORE removing the enemy
         if (enemy.enemyData && enemy.enemyData.id) {
             this.defeatedEnemyIds.push(enemy.enemyData.id);
@@ -5131,23 +5719,10 @@ export default class BattleScene extends Phaser.Scene {
             console.log('[BattleScene] Total defeated in this battle:', this.defeatedEnemyIds);
         }
         
-        // Find enemy index to remove corresponding range indicator
-        const enemyIndex = this.enemies.indexOf(enemy);
-        if (enemyIndex !== -1 && this.rangeIndicators[enemyIndex]) {
-            this.rangeIndicators[enemyIndex].destroy();
-            this.rangeIndicators.splice(enemyIndex, 1);
-        }
-        
         // Clean up BattleAI data
         if (this.battleAI) {
             this.battleAI.removeEnemy(enemy);
             console.log('[BattleScene] Removed BattleAI data for defeated enemy');
-        }
-        
-        // Legacy: Clean up NPC movement data
-        if (this.npcMovementData.has(enemy)) {
-            this.npcMovementData.delete(enemy);
-            console.log('[BattleScene] Removed NPC movement data for defeated enemy');
         }
         
         // Remove enemy (no Phaser text displays to clean up - using DOM only)
@@ -5161,6 +5736,14 @@ export default class BattleScene extends Phaser.Scene {
         if (this.enemies.length === 0) {
             console.log('[BattleScene] All enemies defeated, triggering victory sequence');
             this.showVictorySequence();
+        } else if (this.enemies.length > 0) {
+            // If enemies remain and we were in target mode, return to selection mode
+            if (!this.isInTargetMode && !this.isTargetSelectionMode) {
+                console.log('[BattleScene] Returning to target selection mode');
+                this.isTargetSelectionMode = true;
+                this.selectedTargetIndex = 0;
+                this.resetBattlePositions();
+            }
         }
     }
 
@@ -5336,6 +5919,43 @@ export default class BattleScene extends Phaser.Scene {
                     });
                 }
             });
+        });
+    }
+    
+    /**
+     * Setup mobile event listeners
+     */
+    setupMobileListeners() {
+        // Listen for mobile button presses in battle
+        window.addEventListener('mobilebutton', (e) => {
+            const { button, pressed } = e.detail;
+            
+            if (!pressed) return; // Only handle button press
+            
+            switch (button) {
+                case 'a': // A button - Basic attack / confirm
+                    if (this.isPlayerTurn && !this.isDialogueActive) {
+                        // Trigger melee attack for active character
+                        this.handleMeleeAttack();
+                    }
+                    break;
+                    
+                case 'b': // B button - Switch character
+                    if (!this.isDialogueActive) {
+                        this.switchToNextCharacter();
+                    }
+                    break;
+                    
+                case 'x': // X button - Charge AP
+                    // Handled via shift system
+                    break;
+                    
+                case 'y': // Y button - Special ability / menu
+                    if (this.isPlayerTurn && !this.isDialogueActive) {
+                        // Could trigger special ability
+                    }
+                    break;
+            }
         });
     }
 }

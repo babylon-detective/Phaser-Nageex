@@ -10,6 +10,7 @@ import MenuScene from "./scenes/MenuScene";
 
 import PlayerManager from "./managers/PlayerManager";
 import NpcManager from "./managers/NpcManager";
+import { mobileManager } from "./managers/MobileManager";
 
 // Prevent zooming
 document.addEventListener('keydown', (e) => {
@@ -133,6 +134,12 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+// Initialize mobile manager with game reference
+mobileManager.setGame(game);
+
+// Make mobile manager globally accessible
+window.mobileManager = mobileManager;
 
 window.addEventListener('resize', resizeGame);
 
