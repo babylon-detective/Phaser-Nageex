@@ -75,6 +75,13 @@ export default class BattleMenuScene extends Phaser.Scene {
         // Update gamepad
         this.updateGamepad();
         
+        // Check for Select button (button 8) or B button (button 1) to close menu
+        if (this.isGamepadButtonJustPressed(8) || this.isGamepadButtonJustPressed(1)) {
+            console.log('[BattleMenuScene] Closing menu with gamepad (Select or B button)');
+            this.closeMenu();
+            return;
+        }
+        
         // Handle icon navigation with WASD or left stick (left/right only)
         const navLeft = Phaser.Input.Keyboard.JustDown(this.wasdKeys.left) || 
                         Phaser.Input.Keyboard.JustDown(this.wasdKeys.up) ||

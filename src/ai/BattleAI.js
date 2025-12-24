@@ -7,10 +7,16 @@
  * - Attack decisions (melee vs ranged)
  * - AI state management (idle, combat, defensive)
  * - Target selection (player or party members)
- * - Attack execution (melee and ranged)
+ * - Attack execution (mirroring player's juggle attack system)
  * 
- * FUNDAMENTAL AI PRINCIPLE: When player acts (consumes AP) or charges AP, NPCs freely act
- * Guards with strong melee attacks keep walking TOWARD player when provoked and player charges AP.
+ * FUNDAMENTAL AI PRINCIPLE: NPCs can ONLY act when player is vulnerable
+ * Player is vulnerable when:
+ * 1. Charging AP gauge (Shift key held)
+ * 2. Charging escape gauge (ESC key held for 3 seconds)
+ * 
+ * NPCs mirror the player's combat style - they enter target mode, target party members,
+ * and perform juggle attacks with AP costs, just like the player does.
+ * When player is NOT vulnerable, all NPCs are frozen and cannot attack.
  */
 
 import { npcAI } from './NpcAI.js';
@@ -62,7 +68,7 @@ export class BattleAI {
             // Decision making
             aggressiveness: profile.attackFrequency * difficulty.aggressiveness,
             accuracy: difficulty.accuracy,
-            nextActionTime: Date.now() + Math.random() * 2000 + 1000 // Random delay before first action
+            nextActionTime: 0 // Allow immediate action when player becomes vulnerable (was causing 1-3 second delay)
         };
 
         this.enemyStates.set(enemy, aiState);
@@ -75,15 +81,27 @@ export class BattleAI {
 
     /**
      * Update all enemies AI
-     * NEW SYSTEM: NPCs use target mode and attack with AP like the player
-     * NO MOVEMENT - NPCs stay in place and enter target mode to attack
-     * CRITICAL: NPCs attack MORE AGGRESSIVELY when player is charging AP
+     * NEW SYSTEM: NPCs ONLY act when player is charging AP or escape
+     * NPCs mirror player behavior - they target party members and perform attacks
+     * CRITICAL: NPCs can ONLY attack when player is charging AP or holding escape
      */
-    update(enemies, player, delta, isPlayerChargingAP = false) {
+    update(enemies, player, delta, isPlayerVulnerable = false) {
         if (!player || !this.scene) return;
         
+        // One-time startup log
+        if (!this._startupLogged) {
+            console.log('[BattleAI] ========== AI SYSTEM STARTED ==========');
+            console.log('[BattleAI] Enemy count:', enemies.length);
+            console.log('[BattleAI] AI states initialized:', this.enemyStates.size);
+            enemies.forEach((enemy, i) => {
+                const aiState = this.enemyStates.get(enemy);
+                console.log(`[BattleAI]   Enemy ${i}: ${enemy.enemyData.type}, Has AI state: ${!!aiState}, Aggressiveness: ${aiState?.aggressiveness}`);
+            });
+            console.log('[BattleAI] =======================================');
+            this._startupLogged = true;
+        }
+        
         // Don't update NPCs during dialogue, enemy selection, or victory
-        // BUT ALLOW ATTACKS DURING PLAYER TARGET MODE if player is charging
         if (this.scene.isDialogueActive || this.scene.isEnemySelectionMode || 
             this.scene.isVictorySequence) {
             // Freeze all NPCs
@@ -95,7 +113,35 @@ export class BattleAI {
             return;
         }
         
-        // Allow NPCs to continue their attacks even during player target mode (more dynamic combat)
+        // CRITICAL NEW RULE: NPCs can ONLY act when player is charging AP or escape
+        // If player is not charging/escaping, NPCs are frozen/idle
+        if (!isPlayerVulnerable) {
+            // Freeze all NPCs - no attacks, no movement
+            enemies.forEach(enemy => {
+                if (enemy && enemy.body) {
+                    enemy.body.setVelocityX(0);
+                }
+            });
+            return;
+        }
+        
+        // Player IS vulnerable (charging AP or escape) - NPCs can now act!
+        // Log once when becoming vulnerable
+        if (!this._wasVulnerable) {
+            console.log('[BattleAI] 🔥 Player became VULNERABLE - NPCs activating!');
+            this._wasVulnerable = true;
+        }
+        // Player IS vulnerable (charging AP or escape) - NPCs can now act!
+        // Log once when becoming vulnerable
+        if (!this._wasVulnerable) {
+            console.log('[BattleAI] 🔥 Player became VULNERABLE - NPCs activating!');
+            this._wasVulnerable = true;
+        }
+        
+        // Reset when player becomes safe again
+        if (isPlayerVulnerable === false && this._wasVulnerable) {
+            this._wasVulnerable = false;
+        }
         
         const currentTime = this.scene.time.now;
         
@@ -109,10 +155,11 @@ export class BattleAI {
             // NO MOVEMENT - NPCs stay in place
             enemy.body.setVelocityX(0);
             
-            // Regenerate AP over time
+            // Regenerate AP over time (faster when player is vulnerable)
             const timeSinceLastRegen = currentTime - (aiState.lastAPRegenTime || 0);
             if (timeSinceLastRegen >= 1000) { // Every second
-                const apToRegen = Math.floor(timeSinceLastRegen / 1000) * aiState.apRegenRate;
+                // NPCs regenerate AP faster when player is vulnerable (they get aggressive)
+                const apToRegen = Math.floor(timeSinceLastRegen / 1000) * (aiState.apRegenRate * 1.5);
                 aiState.currentAP = Math.min(aiState.maxAP, aiState.currentAP + apToRegen);
                 aiState.lastAPRegenTime = currentTime;
             }
@@ -120,21 +167,28 @@ export class BattleAI {
             // Check if NPC should enter target mode and attack
             if (!aiState.isInTargetMode) {
                 // Decision: Should NPC attack?
-                // NPCs attack when:
-                // 1. They have enough AP
-                // 2. Enough time has passed since last action
-                // 3. Random chance based on aggressiveness
-                // 4. BONUS: Much more aggressive when player is charging AP
+                // NPCs attack when player is vulnerable (charging AP or escape) with high aggression
                 
                 const hasEnoughAP = aiState.currentAP >= aiState.targetModeAPCost;
                 const cooldownFinished = currentTime >= aiState.nextActionTime;
                 
-                // NPCs are 3x more likely to attack when player is charging AP
-                const baseAggressiveness = aiState.aggressiveness;
-                const chargeBonus = isPlayerChargingAP ? 3.0 : 1.0;
-                const finalAggressiveness = Math.min(0.95, baseAggressiveness * chargeBonus);
+                // Much more aggressive since we can only act when player charges
+                const aggressiveness = Math.min(0.95, aiState.aggressiveness * 2.0);
+                const shouldAttack = Math.random() < aggressiveness;
                 
-                const shouldAttack = Math.random() < finalAggressiveness;
+                // Log first decision for each enemy
+                if (!enemy._firstDecisionLogged) {
+                    console.log(`[BattleAI] ${enemy.enemyData.type} first decision:`, {
+                        hasEnoughAP,
+                        currentAP: aiState.currentAP,
+                        cooldownFinished,
+                        shouldAttack,
+                        aggressiveness: aggressiveness.toFixed(2),
+                        nextActionTime: aiState.nextActionTime,
+                        currentTime
+                    });
+                    enemy._firstDecisionLogged = true;
+                }
                 
                 if (hasEnoughAP && cooldownFinished && shouldAttack) {
                     // Find closest party member to target
@@ -145,15 +199,12 @@ export class BattleAI {
                         aiState.isInTargetMode = true;
                         aiState.currentTarget = closestTarget;
                         aiState.comboCount = 0;
+                        aiState.lastAttackTime = 0; // Reset attack cooldown to allow immediate first hit
                         
                         // NPCs can randomly switch targets mid-combo (10% chance per attack)
                         aiState.canSwapTarget = true;
                         
-                        if (isPlayerChargingAP) {
-                            console.log(`[BattleAI] ⚡ ${enemy.enemyData.type} PUNISHING PLAYER for charging AP - entering target mode!`);
-                        } else {
-                            console.log(`[BattleAI] ${enemy.enemyData.type} entering target mode - attacking ${closestTarget === player ? 'Player' : 'Party Member'}`);
-                        }
+                        console.log(`[BattleAI] ⚡ ${enemy.enemyData.type} ATTACKS while player is vulnerable - targeting ${closestTarget === player ? 'Player' : 'Party Member'}!`);
                     }
                 }
             } else {

@@ -397,6 +397,11 @@ export default class BattleScene extends Phaser.Scene {
             
             // Initialize enemy with BattleAI using profile from NpcAI
             const profile = npcAI.getAIProfile(npcData.type);
+            console.log(`[BattleScene] Initializing AI for ${npcData.type}:`, {
+                profile,
+                attackFrequency: profile.attackFrequency,
+                combatStyle: profile.combatStyle
+            });
             this.battleAI.initEnemy(enemy, profile);
             
             // Legacy: Keep npcMovementData for backward compatibility (will be removed)
@@ -696,7 +701,7 @@ export default class BattleScene extends Phaser.Scene {
                 AP: ${this.currentAP}/${this.maxAP} | Combo: ${this.juggleComboCount}
             </div>
             <div style="font-size: 16px; color: #00FF88; font-weight: bold; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 217, 255, 0.3);">
-                U - Juggle Attack (${this.juggleAPCost} AP) | = - Charge AP | ESC - Exit Combat
+                U/A - Juggle Attack (${this.juggleAPCost} AP) | =/Right Stick - Charge AP | ESC/B - Exit Combat
             </div>
         `;
         
@@ -1192,7 +1197,7 @@ export default class BattleScene extends Phaser.Scene {
         this.chargeAPKey = this.input.keyboard.addKey('EQUALS');
         this.chargeAPKeyAlt = this.input.keyboard.addKey(187); // = key code
         
-        // Battle menu control (/ key for Talk, Items, Skills)
+        // Battle menu control (/ key for Talk, Items, Skills -> Select button on gamepad)
         // Note: Using FORWARD_SLASH (191) for better compatibility
         this.battleMenuKey = this.input.keyboard.addKey(191); // Forward slash key code
         this.battleMenuKeyAlt = this.input.keyboard.addKey('M'); // Alternative: M for Menu
@@ -1446,7 +1451,7 @@ export default class BattleScene extends Phaser.Scene {
                 </div>
             ` : ''}
             <div style="font-size: 16px; color: #FFD700; font-weight: bold; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 215, 0, 0.3);">
-                A/D or Left Stick - Switch Enemy | U/A - Confirm | ESC/B - Cancel
+                A/D or D-pad - Switch Enemy | U/A - Confirm | ESC/B - Cancel
             </div>
         `;
         
@@ -1539,9 +1544,9 @@ export default class BattleScene extends Phaser.Scene {
         this.lastStickLeftState = gamepadStickLeft;
         this.lastStickRightState = gamepadStickRight;
         
-        // Navigate left (A key or left stick)
+        // Navigate left (A key or D-pad/left stick)
         if (Phaser.Input.Keyboard.JustDown(keys.a) || stickLeftJustPressed) {
-            console.log('[BattleScene] A key/Left stick pressed - navigating left');
+            console.log('[BattleScene] A key/D-pad left pressed - navigating left');
             this.selectedEnemyIndex--;
             if (this.selectedEnemyIndex < 0) {
                 this.selectedEnemyIndex = this.enemies.length - 1;
@@ -1550,9 +1555,9 @@ export default class BattleScene extends Phaser.Scene {
             this.updateEnemySelectionUI();
         }
         
-        // Navigate right (D key or right stick)
+        // Navigate right (D key or D-pad/right stick)
         if (Phaser.Input.Keyboard.JustDown(keys.d) || stickRightJustPressed) {
-            console.log('[BattleScene] D key/Right stick pressed - navigating right');
+            console.log('[BattleScene] D key/D-pad right pressed - navigating right');
             this.selectedEnemyIndex++;
             if (this.selectedEnemyIndex >= this.enemies.length) {
                 this.selectedEnemyIndex = 0;
@@ -2512,32 +2517,32 @@ export default class BattleScene extends Phaser.Scene {
         // Update AP system
         this.updateAP(delta);
 
-        // ESC key - multi-function: deselect target (tap) or hold to flee (3 seconds)
+        // ESC key - multi-function: deselect target (quick tap) or hold to flee (3 seconds)
         if (this.escapeKey) {
             const isEscPressed = this.escapeKey.isDown || this.isGamepadButtonPressed(6);
             
             if (isEscPressed && !this.isHoldingEscape) {
-                // ESC just pressed - check context
-                if (this.isInTargetMode) {
-                    // In target mode: single tap deselects target
-                    console.log('[BattleScene] ESC tapped - deselecting target');
-                    this.exitTargetMode();
-                    return;
-                } else {
-                    // In selection mode: start hold timer to flee
-                    this.isHoldingEscape = true;
-                    this.escapeHoldStartTime = this.time.now;
-                    this.escapeProgressBarBackground.setVisible(true);
-                    this.escapeProgressBar.setVisible(true);
-                    console.log('[BattleScene] ESC hold started - hold for 3 seconds to flee');
-                }
+                // ESC just pressed - start hold timer for escape
+                this.isHoldingEscape = true;
+                this.escapeHoldStartTime = this.time.now;
+                this.escapeProgressBarBackground.setVisible(true);
+                this.escapeProgressBar.setVisible(true);
+                console.log('[BattleScene] ESC hold started - hold for 3 seconds to flee (NPCs can attack while escaping!)');
             } else if (!isEscPressed && this.isHoldingEscape) {
                 // ESC released before 3 seconds
+                const holdTime = this.time.now - this.escapeHoldStartTime;
                 this.isHoldingEscape = false;
                 this.escapeProgressBarBackground.setVisible(false);
                 this.escapeProgressBar.setVisible(false);
                 this.escapeProgressBar.width = 0;
-                console.log('[BattleScene] ESC released - escape cancelled');
+                
+                // If released quickly (< 300ms) and in target mode, exit target mode
+                if (holdTime < 300 && this.isInTargetMode) {
+                    console.log('[BattleScene] ESC quick-tapped - deselecting target');
+                    this.exitTargetMode();
+                } else {
+                    console.log('[BattleScene] ESC released - escape cancelled');
+                }
             } else if (isEscPressed && this.isHoldingEscape) {
                 // ESC still held - update progress
                 const holdTime = this.time.now - this.escapeHoldStartTime;
@@ -2558,15 +2563,15 @@ export default class BattleScene extends Phaser.Scene {
 
         // Dialogue mode handled by / key in initializeInput
 
-        // Handle AP charging (keyboard = or gamepad L3 - button 10 - left stick click)
-        const isL3Pressed = this.gamepad && this.gamepad.buttons && this.gamepad.buttons[10] && this.gamepad.buttons[10].pressed;
+        // Handle AP charging (keyboard = or gamepad Right Stick click - button 11)
+        const isRightStickPressed = this.gamepad && this.gamepad.buttons && this.gamepad.buttons[11] && this.gamepad.buttons[11].pressed;
         const isChargingKeyPressed = (this.chargeAPKey && this.chargeAPKey.isDown) || 
                                    (this.chargeAPKeyAlt && this.chargeAPKeyAlt.isDown) ||
-                                   isL3Pressed;
+                                   isRightStickPressed;
         
         if (isChargingKeyPressed) {
             if (!this.isChargingAP) {
-                console.log('[BattleScene] =/L3 held - starting AP charge');
+                console.log('[BattleScene] =/Right Stick held - starting AP charge');
                 this.isChargingAP = true;
                 this.showChargingFeedback();
                 // Play AP charge sound
@@ -2576,7 +2581,7 @@ export default class BattleScene extends Phaser.Scene {
             }
         } else {
             if (this.isChargingAP) {
-                console.log('[BattleScene] =/L3 released - stopping AP charge');
+                console.log('[BattleScene] =/Right Stick released - stopping AP charge');
                 this.isChargingAP = false;
                 // Stop AP charge sound
                 if (this.battleSceneSFX) {
@@ -2585,13 +2590,13 @@ export default class BattleScene extends Phaser.Scene {
             }
         }
         
-        // / or M key or Y button - open battle menu (Talk, Items, Skills)
+        // / or M key or Select button - open battle menu (Talk, Items, Skills)
         const isSlashPressed = (this.battleMenuKey && Phaser.Input.Keyboard.JustDown(this.battleMenuKey));
         const isMPressed = (this.battleMenuKeyAlt && Phaser.Input.Keyboard.JustDown(this.battleMenuKeyAlt));
-        const isYButtonPressed = this.isGamepadButtonJustPressed(3);
+        const isSelectButtonPressed = this.isGamepadButtonJustPressed(8);
         
-        if (isSlashPressed || isMPressed || isYButtonPressed) {
-            console.log('[BattleScene] Battle menu key pressed (/ or M or Y) - opening battle menu');
+        if (isSlashPressed || isMPressed || isSelectButtonPressed) {
+            console.log('[BattleScene] Battle menu key pressed (/ or M or Select) - opening battle menu');
             this.openBattleMenu();
             return;
         }
@@ -2599,12 +2604,12 @@ export default class BattleScene extends Phaser.Scene {
         // ===== TARGET SELECTION MODE =====
         // Use A/D to move the arrow between enemies, U to confirm
         if (this.isTargetSelectionMode) {
-            // A key or Left Stick Left - select previous target
+            // A key or D-pad Left - select previous target
             if (Phaser.Input.Keyboard.JustDown(this.leftKey) || this.isGamepadStickLeftJustPressed()) {
                 this.selectPreviousTarget();
             }
             
-            // D key or Left Stick Right - select next target
+            // D key or D-pad Right - select next target
             if (Phaser.Input.Keyboard.JustDown(this.rightKey) || this.isGamepadStickRightJustPressed()) {
                 this.selectNextTarget();
             }
@@ -2624,25 +2629,25 @@ export default class BattleScene extends Phaser.Scene {
                 this.performJuggleAttack();
             }
             
-            // Q/E keys - rotate character (if AP available and party members exist)
+            // Q/E keys or D-pad Left/Right - rotate character (if AP available and party members exist)
             if (this.partyCharacters && this.partyCharacters.length > 0) {
                 const rotateAPCost = 1; // Cost 1 AP to rotate character
                 
-                if (Phaser.Input.Keyboard.JustDown(this.qKey)) {
+                if (Phaser.Input.Keyboard.JustDown(this.qKey) || this.isGamepadButtonJustPressed(14)) {
                     if (this.currentAP >= rotateAPCost) {
                         this.consumeAP(rotateAPCost);
                         this.rotateCharacter('left');
-                        console.log('[BattleScene] Q pressed - rotated to previous character');
+                        console.log('[BattleScene] Q/D-pad Left pressed - rotated to previous character');
                     } else {
                         this.showNoAPMessage();
                     }
                 }
                 
-                if (Phaser.Input.Keyboard.JustDown(this.eKey)) {
+                if (Phaser.Input.Keyboard.JustDown(this.eKey) || this.isGamepadButtonJustPressed(15)) {
                     if (this.currentAP >= rotateAPCost) {
                         this.consumeAP(rotateAPCost);
                         this.rotateCharacter('right');
-                        console.log('[BattleScene] E pressed - rotated to next character');
+                        console.log('[BattleScene] E/D-pad Right pressed - rotated to next character');
                     } else {
                         this.showNoAPMessage();
                     }
@@ -2653,9 +2658,24 @@ export default class BattleScene extends Phaser.Scene {
             this.updateTargetModeUI();
         }
 
-        // Update NPC AI - NPCs should act even when player is charging AP
+        // Update NPC AI - NPCs ONLY act when player is charging AP OR charging escape
+        // This creates a risk/reward system: charging AP or escaping allows NPCs to attack
+        const isPlayerVulnerable = this.isChargingAP || this.isHoldingEscape;
+        
+        // Debug log vulnerability state changes
+        if (isPlayerVulnerable && !this._wasVulnerable) {
+            console.log('[BattleScene] 🔴 Player is now VULNERABLE! NPCs can attack!', {
+                chargingAP: this.isChargingAP,
+                holdingEscape: this.isHoldingEscape
+            });
+            this._wasVulnerable = true;
+        } else if (!isPlayerVulnerable && this._wasVulnerable) {
+            console.log('[BattleScene] 🟢 Player is now SAFE! NPCs are frozen.');
+            this._wasVulnerable = false;
+        }
+        
         if (this.battleAI && this.enemies.length > 0) {
-            this.battleAI.update(this.enemies, this.player, delta, this.isChargingAP, false);
+            this.battleAI.update(this.enemies, this.player, delta, isPlayerVulnerable);
         }
         
         // Update enemy displays

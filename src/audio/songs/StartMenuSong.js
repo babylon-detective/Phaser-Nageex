@@ -87,21 +87,8 @@ export class StartMenuSong {
             }
         });
         
-        // Sub-bass (deep sine for rumble)
-        this.subBass = new Tone.MonoSynth({
-            oscillator: { type: 'sine' },
-            envelope: {
-                attack: 0.02,
-                decay: 0.3,
-                sustain: 0.7,
-                release: 1.2
-            },
-            filter: {
-                type: 'lowpass',
-                frequency: 150,
-                rolloff: -24
-            }
-        });
+        // Sub-bass removed - was too noisy
+        this.subBass = null;
         
         // Arpeggiator (triangle wave)
         this.arpSynth = new Tone.Synth({
@@ -138,7 +125,7 @@ export class StartMenuSong {
         this.introSynth.connect(this.volume);
         this.padSynth.connect(this.reverb);  // Pads direct to reverb for more space
         this.bass.connect(this.volume);
-        this.subBass.connect(this.volume);
+        // Sub-bass removed
         this.arpSynth.connect(this.delay);
         
         // Generate reverb impulse
@@ -218,28 +205,12 @@ export class StartMenuSong {
         introBass.start(0);
         this.parts.push(introBass);
         
-        // Sub-bass (deep rumble on downbeats)
-        const subBassPattern = new Tone.Sequence((time, note) => {
-            this.subBass.triggerAttackRelease(note, '1n', time);
-        }, ['E1', 'C1', 'G1', 'D1', 'E1', 'A1', 'B1', 'E1'], '2m');
-        subBassPattern.start(0);
-        this.parts.push(subBassPattern);
+        // Sub-bass pattern removed - was too noisy
         
         // ===== SECTION 2: AMBIENT PADS (16m+, loops) =====
         
-        // Long sustained pad chords
-        const padChords = new Tone.Part((time, chord) => {
-            this.padSynth.triggerAttackRelease(chord.notes, chord.duration, time);
-        }, [
-            { time: '16:0:0', notes: ['E3', 'G3', 'B3', 'E4'], duration: '4m' },
-            { time: '20:0:0', notes: ['C3', 'E3', 'G3', 'C4'], duration: '4m' },
-            { time: '24:0:0', notes: ['A2', 'C3', 'E3', 'A3'], duration: '4m' },
-            { time: '28:0:0', notes: ['B2', 'D3', 'F#3', 'B3'], duration: '4m' }
-        ]);
-        padChords.loop = true;
-        padChords.loopEnd = '32m';
-        padChords.start(0);
-        this.parts.push(padChords);
+        // Pad chords removed - were too noisy and deep
+        // Keeping only the sparse ambient melody for clean sound
         
         // Sparse ambient melody
         const ambientMelody = new Tone.Part((time, note) => {
@@ -301,7 +272,7 @@ export class StartMenuSong {
         if (this.introSynth) this.introSynth.dispose();
         if (this.padSynth) this.padSynth.dispose();
         if (this.bass) this.bass.dispose();
-        if (this.subBass) this.subBass.dispose();
+        // Sub-bass removed
         if (this.arpSynth) this.arpSynth.dispose();
         
         // Dispose effects

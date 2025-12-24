@@ -1,31 +1,37 @@
 import * as Tone from 'tone';
 
 /**
- * BATTLE SCENE SONG - Intense Combat Music
+ * BATTLE SCENE SONG - Context-Aware Combat Music
  * 
- * Specifications:
- * - BPM: 120 (fast-paced for combat)
- * - Key: D minor (D, E, F, G, A, Bb, C)
- * - Mood: Intense, energetic, driving, combat-ready
- * - Structure: Continuous loop with strong rhythmic backbone
+ * Two distinct battle themes:
+ * 1. MYSTERY MODE - Suspenseful, mysterious encounter music for neutral NPCs
+ *    - BPM: 100 (moderate, tense)
+ *    - Key: A minor (mysterious, suspenseful)
+ *    - Mood: Tense, uncertain, cautious
  * 
- * A modular Tone.js composition for battle scenes.
- * Features punchy drums, driving bass, aggressive synths, and rhythmic intensity.
+ * 2. FIGHT MODE - Intense action combat music when damage is dealt
+ *    - BPM: 140 (fast, energetic)
+ *    - Key: D minor (aggressive, driving)
+ *    - Mood: Intense, energetic, aggressive
+ * 
+ * Plus victory and recruitment celebration tunes.
  */
 export class BattleSceneSong {
     constructor() {
         this.isPlaying = false;
-        this.bpm = 120;
-        this.key = 'D minor';
+        this.currentMode = null; // 'mystery' or 'fight'
+        this.bpm = 100;
+        this.key = 'A minor';
         
-        // Instruments
+        // Instruments (shared between modes)
         this.kickDrum = null;
         this.snare = null;
         this.hiHat = null;
         this.bass = null;
-        this.subBass = null;
         this.leadSynth = null;
         this.padSynth = null;
+        this.mysteryBell = null; // For mystery mode
+        this.fightSynth = null;  // For fight mode
         
         // Effects
         this.reverb = null;
@@ -125,9 +131,9 @@ export class BattleSceneSong {
             }
         }).connect(this.volume);
         
-        // Bass (driving and punchy)
+        // Bass (lighter, less vibratory)
         this.bass = new Tone.MonoSynth({
-            oscillator: { type: 'square' },
+            oscillator: { type: 'triangle' },
             envelope: {
                 attack: 0.01,
                 decay: 0.2,
@@ -138,24 +144,8 @@ export class BattleSceneSong {
                 attack: 0.01,
                 decay: 0.2,
                 sustain: 0.5,
-                baseFrequency: 200,
-                octaves: 3
-            }
-        }).connect(this.volume);
-        
-        // Sub-bass (deep foundation)
-        this.subBass = new Tone.MonoSynth({
-            oscillator: { type: 'sine' },
-            envelope: {
-                attack: 0.01,
-                decay: 0.3,
-                sustain: 0.5,
-                release: 0.4
-            },
-            filter: {
-                type: 'lowpass',
-                frequency: 100,
-                rolloff: -24
+                baseFrequency: 300,
+                octaves: 2
             }
         }).connect(this.volume);
         
@@ -170,250 +160,349 @@ export class BattleSceneSong {
             }
         }).connect(this.delay);
         
-        // Pad synth (atmospheric texture)
-        this.padSynth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'sine' },
+        // Mystery bell (for mystery mode)
+        this.mysteryBell = new Tone.Synth({
+            oscillator: { type: 'triangle' },
             envelope: {
-                attack: 0.5,
-                decay: 0.3,
-                sustain: 0.6,
-                release: 1.0
+                attack: 0.01,
+                decay: 0.5,
+                sustain: 0.2,
+                release: 0.8
             }
         }).connect(this.reverb);
         
-        // Generate reverb impulse
-        await this.reverb.generate();
+        // Fight synth (aggressive for fight mode)
+        this.fightSynth = new Tone.Synth({
+            oscillator: { type: 'sawtooth' },
+            envelope: {
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.4,
+                release: 0.3
+            }
+        }).connect(this.delay);
         
-        console.log('[BattleSceneSong] ✅ Instruments ready');
+        // Lead synth (versatile)
+        this.leadSynth = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: {
+                attack: 0.02,
+                decay: 0.3,
+                sustain: 0.4,
+                release: 0.4
+            }
+        }).connect(this.delay);
+        
+        // Pad synth (atmospheric, less deep)
+        this.padSynth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'sine' },
+            envelope: {
+                attack: 0.8,
+                decay: 0.4,
+                sustain: 0.5,
+                release: 1.2
+            }
+        }).connect(this.reverb);
+        
+        console.log('[BattleSceneSong] Instruments initialized');
     }
     
     /**
-     * Get D minor chord progressions and notes
+     * Play MYSTERY mode - suspenseful encounter music
      */
-    getDMinorChords() {
-        return {
-            Dm: ['D3', 'F3', 'A3'],
-            Gm: ['G3', 'Bb3', 'D4'],
-            Am: ['A3', 'C4', 'E4'],
-            Bb: ['Bb3', 'D4', 'F4'],
-            C: ['C4', 'E4', 'G4'],
-            F: ['F3', 'A3', 'C4']
-        };
-    }
-    
-    /**
-     * Get D minor scale notes
-     */
-    getDMinorScale() {
-        return {
-            scale: ['D3', 'E3', 'F3', 'G3', 'A3', 'Bb3', 'C4', 'D4'],
-            bass: ['D2', 'E2', 'F2', 'G2', 'A2', 'Bb2', 'C3', 'D3']
-        };
-    }
-    
-    /**
-     * Play the battle song (loops continuously)
-     */
-    async play() {
-        if (this.isPlaying) {
-            console.log('[BattleSceneSong] Already playing');
+    async playMystery() {
+        if (this.isPlaying && this.currentMode === 'mystery') {
+            console.log('[BattleSceneSong] Mystery mode already playing');
             return;
+        }
+        
+        // Stop if playing different mode
+        if (this.isPlaying) {
+            this.stop();
         }
         
         // Initialize instruments if not already done
         await this.init();
         
-        console.log('[BattleSceneSong] Starting playback...');
+        console.log('[BattleSceneSong] Starting MYSTERY mode...');
+        
+        this.currentMode = 'mystery';
+        this.bpm = 100;
+        Tone.Transport.bpm.value = this.bpm;
         
         // Set BPM
         Tone.Transport.bpm.value = this.bpm;
+        this.currentMode = 'mystery';
+        this.bpm = 100;
+        Tone.Transport.bpm.value = this.bpm;
         
-        const chords = this.getDMinorChords();
-        const scale = this.getDMinorScale();
+        // A minor chords for mystery
+        const mysteryChords = {
+            Am: ['A3', 'C4', 'E4'],
+            Dm: ['D3', 'F3', 'A3'],
+            Em: ['E3', 'G3', 'B3'],
+            F: ['F3', 'A3', 'C4']
+        };
         
-        // ===== INTENSE BATTLE BEAT =====
-        
-        // Kick drum pattern (strong 4/4 beat)
-        const kickPattern = new Tone.Part((time, note) => {
+        // Sparse, tense hi-hat
+        const mysteryHiHat = new Tone.Part((time, note) => {
             if (note) {
-                this.kickDrum.triggerAttackRelease('C1', '8n', time, note.velocity || 0.9);
+                this.hiHat.triggerAttackRelease('16n', time, 0.2);
             }
         }, [
-            { time: '0:0:0', velocity: 1.0 },   // Beat 1 - strong
-            { time: '0:1:2', velocity: 0.7 },   // Beat 2.5
-            { time: '0:2:0', velocity: 0.8 },   // Beat 3
-            { time: '0:3:2', velocity: 0.7 },   // Beat 4.5
-            { time: '1:0:0', velocity: 1.0 },   // Beat 1
-            { time: '1:1:2', velocity: 0.7 },   // Beat 2.5
-            { time: '1:2:0', velocity: 0.8 },   // Beat 3
-            { time: '1:3:2', velocity: 0.7 }    // Beat 4.5
+            { time: '0:0:0' },
+            { time: '0:2:0' },
+            { time: '1:0:0' },
+            { time: '1:2:0' }
         ]);
-        kickPattern.loop = true;
-        kickPattern.loopEnd = '2m';
-        kickPattern.start(0);
-        this.parts.push(kickPattern);
+        mysteryHiHat.loop = true;
+        mysteryHiHat.loopEnd = '2m';
+        mysteryHiHat.start(0);
+        this.parts.push(mysteryHiHat);
         
-        // Snare pattern (backbeat on 2 and 4)
-        const snarePattern = new Tone.Part((time, note) => {
-            if (note) {
-                this.snare.triggerAttackRelease('8n', time, note.velocity || 0.7);
-            }
+        // Soft kick (heartbeat-like)
+        const mysteryKick = new Tone.Part((time) => {
+            this.kickDrum.triggerAttackRelease('C1', '8n', time, 0.4);
         }, [
-            { time: '0:1:0', velocity: 0.8 },   // Beat 2
-            { time: '0:3:0', velocity: 0.8 },   // Beat 4
-            { time: '1:1:0', velocity: 0.8 },   // Beat 2
-            { time: '1:3:0', velocity: 0.8 }    // Beat 4
+            { time: '0:0:0' },
+            { time: '0:3:0' },
+            { time: '1:1:0' }
         ]);
-        snarePattern.loop = true;
-        snarePattern.loopEnd = '2m';
-        snarePattern.start(0);
-        this.parts.push(snarePattern);
+        mysteryKick.loop = true;
+        mysteryKick.loopEnd = '2m';
+        mysteryKick.start(0);
+        this.parts.push(mysteryKick);
         
-        // Hi-hat pattern (fast 16th notes with accents)
-        const hiHatPattern = new Tone.Part((time, note) => {
-            if (note) {
-                this.hiHat.triggerAttackRelease('16n', time, note.velocity || 0.3);
-            }
+        // Mysterious bell melody
+        const bellMelody = new Tone.Part((time, note) => {
+            this.mysteryBell.triggerAttackRelease(note.pitch, note.duration, time, 0.5);
         }, [
-            { time: '0:0:0', velocity: 0.5 },   // Beat 1
-            { time: '0:0:2', velocity: 0.3 },
-            { time: '0:1:0', velocity: 0.4 },
-            { time: '0:1:2', velocity: 0.3 },
-            { time: '0:2:0', velocity: 0.5 },
-            { time: '0:2:2', velocity: 0.3 },
-            { time: '0:3:0', velocity: 0.4 },
-            { time: '0:3:2', velocity: 0.3 },
-            { time: '1:0:0', velocity: 0.5 },
-            { time: '1:0:2', velocity: 0.3 },
-            { time: '1:1:0', velocity: 0.4 },
-            { time: '1:1:2', velocity: 0.3 },
-            { time: '1:2:0', velocity: 0.5 },
-            { time: '1:2:2', velocity: 0.3 },
-            { time: '1:3:0', velocity: 0.4 },
-            { time: '1:3:2', velocity: 0.3 }
+            { time: '0:0:0', pitch: 'E5', duration: '4n' },
+            { time: '0:2:0', pitch: 'D5', duration: '4n' },
+            { time: '1:0:0', pitch: 'C5', duration: '4n' },
+            { time: '1:2:0', pitch: 'A4', duration: '2n' }
         ]);
-        hiHatPattern.loop = true;
-        hiHatPattern.loopEnd = '2m';
-        hiHatPattern.start(0);
-        this.parts.push(hiHatPattern);
+        bellMelody.loop = true;
+        bellMelody.loopEnd = '2m';
+        bellMelody.start(0);
+        this.parts.push(bellMelody);
         
-        // Sub-bass pattern (deep foundation)
-        const subBassPattern = new Tone.Part((time, note) => {
-            if (note) {
-                this.subBass.triggerAttackRelease(note.pitch, '4n', time);
-            }
+        // Suspenseful bass line
+        const mysteryBass = new Tone.Part((time, note) => {
+            this.bass.triggerAttackRelease(note.pitch, '4n', time, 0.6);
         }, [
-            { time: '0:0:0', pitch: 'D1' },
-            { time: '0:2:0', pitch: 'D1' },
-            { time: '1:0:0', pitch: 'G1' },
-            { time: '1:2:0', pitch: 'G1' }
+            { time: '0:0:0', pitch: 'A2' },
+            { time: '0:3:0', pitch: 'G2' },
+            { time: '1:1:0', pitch: 'F2' },
+            { time: '1:3:0', pitch: 'E2' }
         ]);
-        subBassPattern.loop = true;
-        subBassPattern.loopEnd = '2m';
-        subBassPattern.start(0);
-        this.parts.push(subBassPattern);
+        mysteryBass.loop = true;
+        mysteryBass.loopEnd = '2m';
+        mysteryBass.start(0);
+        this.parts.push(mysteryBass);
         
-        // Bass line (driving rhythm)
-        const bassLine = new Tone.Part((time, note) => {
-            this.bass.triggerAttackRelease(note.pitch, note.duration, time, note.velocity || 0.8);
+        // Atmospheric pads
+        const mysteryPads = new Tone.Part((time, chord) => {
+            this.padSynth.triggerAttackRelease(chord.notes, '2m', time);
         }, [
-            { time: '0:0:0', pitch: 'D2', duration: '8n', velocity: 0.9 },
-            { time: '0:0:2', pitch: 'D2', duration: '8n', velocity: 0.7 },
-            { time: '0:1:0', pitch: 'F2', duration: '8n', velocity: 0.8 },
-            { time: '0:2:0', pitch: 'A2', duration: '4n', velocity: 0.9 },
-            { time: '0:3:0', pitch: 'G2', duration: '8n', velocity: 0.8 },
-            { time: '0:3:2', pitch: 'F2', duration: '8n', velocity: 0.7 },
-            { time: '1:0:0', pitch: 'G2', duration: '8n', velocity: 0.9 },
-            { time: '1:0:2', pitch: 'G2', duration: '8n', velocity: 0.7 },
-            { time: '1:1:0', pitch: 'Bb2', duration: '8n', velocity: 0.8 },
-            { time: '1:2:0', pitch: 'D3', duration: '4n', velocity: 0.9 },
-            { time: '1:3:0', pitch: 'C3', duration: '8n', velocity: 0.8 },
-            { time: '1:3:2', pitch: 'Bb2', duration: '8n', velocity: 0.7 }
+            { time: '0:0:0', notes: mysteryChords.Am },
+            { time: '2:0:0', notes: mysteryChords.Dm }
         ]);
-        bassLine.loop = true;
-        bassLine.loopEnd = '2m';
-        bassLine.start(0);
-        this.parts.push(bassLine);
+        mysteryPads.loop = true;
+        mysteryPads.loopEnd = '4m';
+        mysteryPads.start(0);
+        this.parts.push(mysteryPads);
         
-        // Lead synth melody (aggressive and rhythmic)
-        const leadMelody = new Tone.Part((time, note) => {
-            this.leadSynth.triggerAttackRelease(note.pitch, note.duration, time, note.velocity);
-        }, [
-            { time: '0:0:0', pitch: 'D4', duration: '8n', velocity: 0.6 },
-            { time: '0:0:2', pitch: 'F4', duration: '8n', velocity: 0.5 },
-            { time: '0:1:0', pitch: 'A4', duration: '4n', velocity: 0.7 },
-            { time: '0:2:0', pitch: 'G4', duration: '8n', velocity: 0.6 },
-            { time: '0:2:2', pitch: 'F4', duration: '8n', velocity: 0.5 },
-            { time: '0:3:0', pitch: 'D4', duration: '4n', velocity: 0.6 },
-            { time: '1:0:0', pitch: 'G4', duration: '8n', velocity: 0.6 },
-            { time: '1:0:2', pitch: 'Bb4', duration: '8n', velocity: 0.5 },
-            { time: '1:1:0', pitch: 'D5', duration: '4n', velocity: 0.7 },
-            { time: '1:2:0', pitch: 'C5', duration: '8n', velocity: 0.6 },
-            { time: '1:2:2', pitch: 'Bb4', duration: '8n', velocity: 0.5 },
-            { time: '1:3:0', pitch: 'G4', duration: '4n', velocity: 0.6 }
-        ]);
-        leadMelody.loop = true;
-        leadMelody.loopEnd = '2m';
-        leadMelody.start(0);
-        this.parts.push(leadMelody);
-        
-        // Pad chords (atmospheric texture)
-        const padChords = new Tone.Part((time, chord) => {
-            this.padSynth.triggerAttackRelease(chord.notes, chord.duration, time);
-        }, [
-            { time: '0:0:0', notes: ['D3', 'F3', 'A3'], duration: '2m' },
-            { time: '2:0:0', notes: ['G3', 'Bb3', 'D4'], duration: '2m' }
-        ]);
-        padChords.loop = true;
-        padChords.loopEnd = '4m';
-        padChords.start(0);
-        this.parts.push(padChords);
-        
-        // Start transport
         Tone.Transport.start();
         this.isPlaying = true;
-        
-        console.log(`[BattleSceneSong] ▶️ Playing (${this.key}, ${this.bpm} BPM, intense battle loop)`);
+        console.log('[BattleSceneSong] ▶️ MYSTERY mode playing (A minor, 100 BPM, suspenseful)');
     }
     
     /**
-     * Play victory tune (short, triumphant)
+     * Play FIGHT mode - intense action combat music
+     */
+    async playFight() {
+        if (this.isPlaying && this.currentMode === 'fight') {
+            console.log('[BattleSceneSong] Fight mode already playing');
+            return;
+        }
+        
+        // Stop if playing different mode
+        if (this.isPlaying) {
+            this.stop();
+        }
+        
+        // Initialize instruments if not already done
+        await this.init();
+        
+        console.log('[BattleSceneSong] Starting FIGHT mode...');
+        
+        this.currentMode = 'fight';
+        this.bpm = 140;
+        Tone.Transport.bpm.value = this.bpm;
+        this.currentMode = 'fight';
+        this.bpm = 140;
+        Tone.Transport.bpm.value = this.bpm;
+        
+        // D minor chords for fight
+        const fightChords = {
+            Dm: ['D4', 'F4', 'A4'],
+            Gm: ['G3', 'Bb3', 'D4'],
+            A: ['A3', 'C#4', 'E4'],
+            Bb: ['Bb3', 'D4', 'F4']
+        };
+        
+        // Fast energetic kick pattern
+        const fightKick = new Tone.Part((time, note) => {
+            if (note) {
+                this.kickDrum.triggerAttackRelease('C1', '16n', time, note.velocity);
+            }
+        }, [
+            { time: '0:0:0', velocity: 1.0 },
+            { time: '0:0:3', velocity: 0.7 },
+            { time: '0:1:2', velocity: 0.8 },
+            { time: '0:2:0', velocity: 0.9 },
+            { time: '0:2:3', velocity: 0.6 },
+            { time: '0:3:2', velocity: 0.8 }
+        ]);
+        fightKick.loop = true;
+        fightKick.loopEnd = '1m';
+        fightKick.start(0);
+        this.parts.push(fightKick);
+        
+        // Punchy snare
+        const fightSnare = new Tone.Part((time) => {
+            this.snare.triggerAttackRelease('16n', time, 0.8);
+        }, [
+            { time: '0:1:0' },
+            { time: '0:3:0' }
+        ]);
+        fightSnare.loop = true;
+        fightSnare.loopEnd = '1m';
+        fightSnare.start(0);
+        this.parts.push(fightSnare);
+        
+        // Fast hi-hat
+        const fightHiHat = new Tone.Part((time, note) => {
+            this.hiHat.triggerAttackRelease('32n', time, note.velocity);
+        }, [
+            { time: '0:0:0', velocity: 0.5 },
+            { time: '0:0:2', velocity: 0.3 },
+            { time: '0:1:0', velocity: 0.5 },
+            { time: '0:1:2', velocity: 0.3 },
+            { time: '0:2:0', velocity: 0.5 },
+            { time: '0:2:2', velocity: 0.3 },
+            { time: '0:3:0', velocity: 0.5 },
+            { time: '0:3:2', velocity: 0.3 }
+        ]);
+        fightHiHat.loop = true;
+        fightHiHat.loopEnd = '1m';
+        fightHiHat.start(0);
+        this.parts.push(fightHiHat);
+        
+        // Aggressive, jumpy bass line
+        const fightBass = new Tone.Part((time, note) => {
+            this.bass.triggerAttackRelease(note.pitch, '16n', time, 0.9);
+        }, [
+            { time: '0:0:0', pitch: 'D3' },
+            { time: '0:0:2', pitch: 'D3' },
+            { time: '0:1:0', pitch: 'F3' },
+            { time: '0:1:3', pitch: 'D3' },
+            { time: '0:2:0', pitch: 'A3' },
+            { time: '0:2:2', pitch: 'G3' },
+            { time: '0:3:0', pitch: 'F3' },
+            { time: '0:3:2', pitch: 'E3' }
+        ]);
+        fightBass.loop = true;
+        fightBass.loopEnd = '1m';
+        fightBass.start(0);
+        this.parts.push(fightBass);
+        
+        // Energetic aggressive melody
+        const fightMelody = new Tone.Part((time, note) => {
+            this.fightSynth.triggerAttackRelease(note.pitch, '16n', time, 0.7);
+        }, [
+            { time: '0:0:0', pitch: 'D5' },
+            { time: '0:0:3', pitch: 'F5' },
+            { time: '0:1:2', pitch: 'A5' },
+            { time: '0:2:0', pitch: 'G5' },
+            { time: '0:2:2', pitch: 'F5' },
+            { time: '0:3:0', pitch: 'D5' },
+            { time: '0:3:3', pitch: 'A4' }
+        ]);
+        fightMelody.loop = true;
+        fightMelody.loopEnd = '1m';
+        fightMelody.start(0);
+        this.parts.push(fightMelody);
+        
+        // Driving chord stabs
+        const fightChordStabs = new Tone.Part((time, chord) => {
+            this.padSynth.triggerAttackRelease(chord.notes, '8n', time);
+        }, [
+            { time: '0:0:0', notes: fightChords.Dm },
+            { time: '0:2:0', notes: fightChords.Gm },
+            { time: '1:0:0', notes: fightChords.A },
+            { time: '1:2:0', notes: fightChords.Bb }
+        ]);
+        fightChordStabs.loop = true;
+        fightChordStabs.loopEnd = '2m';
+        fightChordStabs.start(0);
+        this.parts.push(fightChordStabs);
+        
+        Tone.Transport.start();
+        this.isPlaying = true;
+        console.log('[BattleSceneSong] ▶️ FIGHT mode playing (D minor, 140 BPM, intense action!)');
+    }
+    
+    /**
+     * Legacy play method - defaults to mystery mode
+     */
+    async play() {
+        return this.playMystery();
+    }
+    
+    /**
+     * Play victory tune - congratulatory and triumphant
      */
     async playVictoryTune() {
         if (!this.initialized) {
             await this.init();
         }
         
-        console.log('[BattleSceneSong] Playing victory tune...');
+        console.log('[BattleSceneSong] Playing VICTORY tune...');
         
         // Stop battle loop
         if (this.isPlaying) {
             this.stop();
         }
         
-        // Create victory tune (triumphant ascending chord progression)
+        // Create bright congratulatory synth
         const victorySynth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'sine' },
+            oscillator: { type: 'triangle' },
             envelope: {
                 attack: 0.01,
                 decay: 0.3,
-                sustain: 0.5,
+                sustain: 0.4,
                 release: 0.8
             }
         }).toDestination();
-        victorySynth.volume.value = -5;
+        victorySynth.volume.value = -8;
         
-        // Triumphant ascending progression
-        victorySynth.triggerAttackRelease(['D4', 'F4', 'A4'], '4n');
-        setTimeout(() => {
-            victorySynth.triggerAttackRelease(['G4', 'Bb4', 'D5'], '4n');
-        }, 500);
-        setTimeout(() => {
-            victorySynth.triggerAttackRelease(['A4', 'C5', 'E5'], '4n');
-        }, 1000);
-        setTimeout(() => {
-            victorySynth.triggerAttackRelease(['D5', 'F5', 'A5'], '2n');
-        }, 1500);
+        // Victory fanfare - triumphant ascending progression
+        const schedule = [
+            { time: 0, notes: ['D4', 'F4', 'A4'], duration: '4n' },
+            { time: 300, notes: ['E4', 'G4', 'B4'], duration: '4n' },
+            { time: 600, notes: ['F4', 'A4', 'C5'], duration: '4n' },
+            { time: 900, notes: ['G4', 'B4', 'D5'], duration: '4n' },
+            { time: 1200, notes: ['A4', 'C5', 'E5'], duration: '2n' },
+            { time: 1800, notes: ['D5', 'F5', 'A5'], duration: '1n' }
+        ];
+        
+        schedule.forEach(({ time, notes, duration }) => {
+            setTimeout(() => {
+                victorySynth.triggerAttackRelease(notes, duration);
+            }, time);
+        });
         
         // Store reference for cleanup
         this.victoryTune = victorySynth;
@@ -424,64 +513,61 @@ export class BattleSceneSong {
                 this.victoryTune.dispose();
                 this.victoryTune = null;
             }
-        }, 3000);
+        }, 3500);
     }
     
     /**
-     * Play recruitment tune (distinct, welcoming)
+     * Play recruitment tune - friendly and welcoming
      */
     async playRecruitmentTune() {
         if (!this.initialized) {
             await this.init();
         }
         
-        console.log('[BattleSceneSong] Playing recruitment tune...');
+        console.log('[BattleSceneSong] Playing RECRUITMENT tune...');
         
-        // Stop battle loop temporarily (will resume after tune)
-        const wasPlaying = this.isPlaying;
-        if (wasPlaying) {
+        // Stop battle loop
+        if (this.isPlaying) {
             this.stop();
         }
         
-        // Create recruitment tune (welcoming, ascending melody)
+        // Create warm friendly synth
         const recruitmentSynth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'triangle' },
+            oscillator: { type: 'sine' },
             envelope: {
-                attack: 0.1,
-                decay: 0.2,
-                sustain: 0.4,
-                release: 0.6
+                attack: 0.15,
+                decay: 0.3,
+                sustain: 0.5,
+                release: 0.9
             }
         }).toDestination();
-        recruitmentSynth.volume.value = -5;
+        recruitmentSynth.volume.value = -8;
         
-        // Welcoming ascending melody
-        recruitmentSynth.triggerAttackRelease(['C4', 'E4', 'G4'], '4n');
-        setTimeout(() => {
-            recruitmentSynth.triggerAttackRelease(['D4', 'F4', 'A4'], '4n');
-        }, 500);
-        setTimeout(() => {
-            recruitmentSynth.triggerAttackRelease(['E4', 'G4', 'B4'], '4n');
-        }, 1000);
-        setTimeout(() => {
-            recruitmentSynth.triggerAttackRelease(['G4', 'B4', 'D5'], '2n');
-        }, 1500);
-        setTimeout(() => {
-            recruitmentSynth.triggerAttackRelease(['C5', 'E5', 'G5'], '2n');
-        }, 2500);
+        // Friendly welcoming melody - warm and inviting
+        const schedule = [
+            { time: 0, notes: ['G4', 'B4', 'D5'], duration: '4n' },
+            { time: 400, notes: ['A4', 'C5', 'E5'], duration: '4n' },
+            { time: 800, notes: ['B4', 'D5', 'F#5'], duration: '4n' },
+            { time: 1200, notes: ['C5', 'E5', 'G5'], duration: '2n' },
+            { time: 1800, notes: ['D5', 'F#5', 'A5'], duration: '4n' },
+            { time: 2200, notes: ['E5', 'G5', 'B5'], duration: '4n' },
+            { time: 2600, notes: ['G5', 'B5', 'D6'], duration: '1n' }
+        ];
+        
+        schedule.forEach(({ time, notes, duration }) => {
+            setTimeout(() => {
+                recruitmentSynth.triggerAttackRelease(notes, duration);
+            }, time);
+        });
         
         // Store reference for cleanup
         this.recruitmentTune = recruitmentSynth;
         
-        // Clean up after tune finishes and resume battle music if it was playing
+        // Clean up after tune finishes
         setTimeout(() => {
             if (this.recruitmentTune) {
                 this.recruitmentTune.dispose();
                 this.recruitmentTune = null;
-            }
-            // Resume battle music if it was playing before
-            if (wasPlaying && !this.isPlaying) {
-                this.play();
             }
         }, 4000);
     }
@@ -494,7 +580,7 @@ export class BattleSceneSong {
             return;
         }
         
-        console.log('[BattleSceneSong] Stopping...');
+        console.log(`[BattleSceneSong] Stopping ${this.currentMode} mode...`);
         
         // Stop all parts
         this.parts.forEach(part => {
@@ -508,6 +594,7 @@ export class BattleSceneSong {
         Tone.Transport.cancel();
         
         this.isPlaying = false;
+        this.currentMode = null;
         console.log('[BattleSceneSong] ⏹️ Stopped');
     }
     
@@ -532,9 +619,10 @@ export class BattleSceneSong {
         if (this.snare) this.snare.dispose();
         if (this.hiHat) this.hiHat.dispose();
         if (this.bass) this.bass.dispose();
-        if (this.subBass) this.subBass.dispose();
         if (this.leadSynth) this.leadSynth.dispose();
         if (this.padSynth) this.padSynth.dispose();
+        if (this.mysteryBell) this.mysteryBell.dispose();
+        if (this.fightSynth) this.fightSynth.dispose();
         
         // Dispose effects
         if (this.reverb) this.reverb.dispose();
@@ -542,15 +630,15 @@ export class BattleSceneSong {
         if (this.filter) this.filter.dispose();
         if (this.compressor) this.compressor.dispose();
         if (this.volume) this.volume.dispose();
-        
         // Reset references
         this.kickDrum = null;
         this.snare = null;
         this.hiHat = null;
         this.bass = null;
-        this.subBass = null;
         this.leadSynth = null;
         this.padSynth = null;
+        this.mysteryBell = null;
+        this.fightSynth = null;
         this.reverb = null;
         this.delay = null;
         this.filter = null;
