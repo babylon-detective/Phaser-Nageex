@@ -166,6 +166,36 @@ class MobileManager {
         if (this.rotationOverlay) {
             this.rotationOverlay.style.display = 'none';
             this.resumeGame();
+            
+            // Enter fullscreen when rotating to landscape
+            this.enterFullscreen();
+        }
+    }
+    
+    /**
+     * Enter fullscreen mode
+     */
+    enterFullscreen() {
+        if (!this.isMobile) return;
+        
+        try {
+            const element = document.documentElement;
+            
+            if (element.requestFullscreen) {
+                element.requestFullscreen().catch(err => {
+                    console.warn('[MobileManager] Fullscreen request failed:', err);
+                });
+            } else if (element.webkitRequestFullscreen) { // Safari
+                element.webkitRequestFullscreen();
+            } else if (element.mozRequestFullScreen) { // Firefox
+                element.mozRequestFullScreen();
+            } else if (element.msRequestFullscreen) { // IE/Edge
+                element.msRequestFullscreen();
+            }
+            
+            console.log('[MobileManager] Entered fullscreen mode');
+        } catch (err) {
+            console.warn('[MobileManager] Could not enter fullscreen:', err);
         }
     }
     

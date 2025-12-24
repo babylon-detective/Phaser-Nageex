@@ -13,6 +13,7 @@
   "description": "JRPG",
   "dependencies": {
     "phaser": "^3.70.0",
+    "phaser-virtual-joystick": "^0.3.1",
     "tone": "^15.1.22"
   },
   "devDependencies": {
